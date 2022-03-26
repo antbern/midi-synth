@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "preLaunchTask": "Cargo build",
+            "name": "Pico Debug",
+            "device": "RP2040",
+            "numberOfProcessors": 2,
+            "gdbPath": "arm-none-eabi-gdb",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/target/thumbv6m-none-eabi/debug/pico-midi-synth",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": [
+                "interface/picoprobe.cfg",
+                "target/rp2040-core0.cfg"
+            ],
+            // "servertype": "external",
+            // "gdbTarget": "localhost:3333",
+            // "openOCDLaunchCommands": [
+            //     "transport select swd",
+            //     "adapter speed 4000"
+            // ],
+            "svdFile": "${env:PICO_HOME}/svd/rp2040.svd",
+            "preLaunchCommands": [
+                "monitor init",
+                "monitor reset init",
+                "monitor halt",
+            ],
+            "runToEntryPoint": "main",
+            "postRestartCommands": [
+                "break main",
+                "continue"
+            ],
+        }
+    ]
+}
