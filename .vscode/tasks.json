@@ -33,6 +33,18 @@
                 "isDefault": true
             },
             "dependsOn": "Cargo build"
+        },
+        {
+            "label": "Launch defmt",
+            "type": "shell",
+            "command": "stty -F /dev/ttyACM0 115200 raw > /dev/null; cat /dev/ttyACM0 | defmt-print -e target/thumbv6m-none-eabi/debug/pico-midi-synth",
+            "problemMatcher": [],
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true,
+            }
         }
     ]
 }
