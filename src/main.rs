@@ -3,6 +3,7 @@
 
 mod defmt_uart;
 mod generator;
+mod i2s;
 mod waveforms;
 
 use core::cell::RefCell;
@@ -21,16 +22,16 @@ use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     gpio::{
         bank0::{Gpio0, Gpio1},
-        FunctionPio0, FunctionUart, Pin,
+        FunctionUart,
     },
     pac,
-    pio::{Buffers, PIOExt},
+    pio::PIOExt,
     sio::Sio,
     uart::{self, UartPeripheral},
     watchdog::Watchdog,
 };
 
-use crate::generator::SineWave;
+use crate::{generator::SineWave, i2s::I2SOutput};
 
 /// Alias the type for our UART pins to make things clearer.
 type UartPins = (
@@ -82,7 +83,7 @@ fn main() -> ! {
     let uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
             uart::common_configs::_115200_8_N_1,
-            clocks.peripheral_clock.into(),
+            clocks.peripheral_clock.freq(),
         )
         .unwrap();
 
@@ -96,89 +97,31 @@ fn main() -> ! {
     // UART is now initialized, and we can start using defmt macros!
     info!("Program start");
 
-    // DATA: Pin GPIO2
-    // BCLK: Pin GPIO3
-    // LRCLCK: Pin GPIO4
+    let sampling_freq = 16_000;
 
-    let data_pin = 2;
-    let bclk_pin = 3;
-    let lrclk_pin = 4;
-
-    // configure pins for Pio0
-    let _data: Pin<_, FunctionPio0> = pins.gpio2.into_mode();
-    let _bclk: Pin<_, FunctionPio0> = pins.gpio3.into_mode();
-    let _lrclk: Pin<_, FunctionPio0> = pins.gpio4.into_mode();
-
-    // Create and start the I2S pio program
-    let program = pio_proc::pio_file!("audio_i2s.pio", options());
-    let _s = program.public_defines.entry_point;
-
-    // Initialize and start PIO
-    let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
-    let installed = pio.install(&program.program).unwrap();
-
-    let _d = installed.wrap_target();
-
-    debug!("sysclk = {:?}", clocks.system_clock.freq().0);
-
-    let sample_freq: u32 = 16_000; //32_000; // 16khz
-
-    let system_clock_frequency = clocks.system_clock.freq().0;
-
-    core::assert!(system_clock_frequency < 0x40000000);
-    let divider = system_clock_frequency * 4 / sample_freq; // avoid arithmetic overflow
-    core::assert!(divider < 0x1000000);
-
-    debug!("divider >> 8 = {:?}", divider >> 8);
-    debug!("divider & 0xff = {:?}", divider & 0xff);
-
-    // construct the input the clock_divisor() call expects...
-    let divisor = (divider >> 8) as f32 + (divider & 0xff) as f32 / 256.0;
-
-    // just double check with the logic from clock_divisor()
-    let int = divisor as u16;
-    let frac = ((divisor - int as f32) * 256.0) as u8;
-
-    debug!("int = {:?}", int);
-    debug!("frac = {:?}", frac);
-
-    let (mut sm, _rx, mut tx) = hal::pio::PIOBuilder::from_program(installed)
-        .side_set_pin_base(bclk_pin)
-        .out_pins(data_pin, 1)
-        .out_shift_direction(hal::pio::ShiftDirection::Left)
-        .autopull(true)
-        .pull_threshold(32)
-        .clock_divisor(divisor)
-        .buffers(Buffers::OnlyTx)
-        .build(sm0);
-
-    // The GPIO pins need to be configured as an output.
-    sm.set_pindirs([
-        (data_pin, hal::pio::PinDir::Output),
-        (bclk_pin, hal::pio::PinDir::Output),
-        (lrclk_pin, hal::pio::PinDir::Output),
-    ]);
-
-    sm.exec_instruction(
-        pio::InstructionOperands::JMP {
-            condition: pio::JmpCondition::Always,
-            address: 0x18 + 0x7 as u8,
-        }
-        .encode(),
+    let (pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
+    let mut i2s = I2SOutput::new(
+        (
+            pins.gpio2.into_mode(),
+            pins.gpio3.into_mode(),
+            pins.gpio4.into_mode(),
+        ),
+        sampling_freq,
+        &clocks,
+        pio,
+        sm0,
     );
-
-    sm.start();
 
     let mut led_pin = pins.led.into_push_pull_output();
 
     let freq = 440 * 2;
 
-    let mut generator = SineWave::new(sample_freq as f32, freq as f32);
+    let mut generator = SineWave::new(sampling_freq as f32, freq as f32);
 
     let mut next_sample = 0;
     loop {
         // push samples but do not advance if buffer is full
-        if tx.write(next_sample >> 8) {
+        if i2s.write(next_sample >> 8) {
             led_pin.set_high().unwrap();
             next_sample = generator.next();
         } else {
