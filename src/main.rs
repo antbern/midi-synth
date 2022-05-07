@@ -2,6 +2,8 @@
 #![no_main]
 
 mod defmt_uart;
+mod generator;
+mod waveforms;
 
 use core::cell::RefCell;
 
@@ -27,6 +29,8 @@ use bsp::hal::{
     uart::{self, UartPeripheral},
     watchdog::Watchdog,
 };
+
+use crate::generator::SineWave;
 
 /// Alias the type for our UART pins to make things clearer.
 type UartPins = (
@@ -167,36 +171,18 @@ fn main() -> ! {
 
     let mut led_pin = pins.led.into_push_pull_output();
 
-    //generate a square wave output
     let freq = 440 * 2;
 
-    let sample_counter_wrap = sample_freq / freq;
-    let mut sample_counter = 0u32;
+    let mut generator = SineWave::new(sample_freq as f32, freq as f32);
+
+    let mut next_sample = 0;
     loop {
-        let sample = if sample_counter < sample_counter_wrap / 2 {
-            i16::MAX
-        } else {
-            i16::MIN
-        };
-
-        // let sample = 0u32;
-        //let lr_sample: u32 = ((sample as u16 as u32) << 16) | (sample as u16) as u32;
-        // debug!("{:x}", sample);
-
         // push samples but do not advance if buffer is full
-        if tx.write(sample >> 8) {
-            sample_counter = (sample_counter + 1) % sample_counter_wrap;
+        if tx.write(next_sample >> 8) {
             led_pin.set_high().unwrap();
+            next_sample = generator.next();
         } else {
             led_pin.set_low().unwrap();
         }
-
-        // tx.write(0u32);
-        // info!("on!");
-
-        // delay.delay_ms(500);
-        // info!("off!");
-
-        // delay.delay_ms(500);
     }
 }
