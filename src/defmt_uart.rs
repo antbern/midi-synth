@@ -1,7 +1,7 @@
-/// Module contains an implementation of `defmt::Logger` that prints to the UART.
-/// Based heavily on the `defmt-rtt` implementation for various versions, including
-/// [0.2.0](https://docs.rs/defmt-rtt/0.2.0/src/defmt_rtt/lib.rs.html#25-64) and
-/// [0.3.2](https://docs.rs/defmt-rtt/0.3.2/src/defmt_rtt/lib.rs.html#35-83)
+//! Module contains an implementation of `defmt::Logger` that prints to the UART.
+//! Based heavily on the `defmt-rtt` implementation for various versions, including
+//! [0.2.0](https://docs.rs/defmt-rtt/0.2.0/src/defmt_rtt/lib.rs.html#25-64) and
+//! [0.3.2](https://docs.rs/defmt-rtt/0.3.2/src/defmt_rtt/lib.rs.html#35-83)
 ///
 use core::sync::atomic::{AtomicBool, Ordering};
 
