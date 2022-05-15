@@ -45,6 +45,8 @@ type Uart = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART0, UartPins>;
 /// Shared UART object so that it can be accessed from defmt
 static GLOBAL_UART0: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
+static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
+
 #[entry]
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
@@ -96,6 +98,7 @@ fn main() -> ! {
 
     // UART is now initialized, and we can start using defmt macros!
     info!("Program start");
+    let mut led_pin = pins.led.into_push_pull_output();
 
     let sampling_freq = 16_000;
 
@@ -112,20 +115,101 @@ fn main() -> ! {
         sm0,
     );
 
-    let mut led_pin = pins.led.into_push_pull_output();
+    // fill the buffer first
 
-    let freq = 440 * 2;
+    let mut generator = SineWave::new(sampling_freq as f32, 440 as f32);
 
-    let mut generator = SineWave::new(sampling_freq as f32, freq as f32);
+    for i in 0..unsafe { DMA_BUFFER.len() } {
+        let sample = generator.next();
+        let sample = sample >> 5; // adjust volume
 
+        // SAFETY: we are only writing to this once, while no one else is doing it
+        unsafe { DMA_BUFFER[i] = sample };
+    }
+
+    //// test direct I2S output first
     let mut next_sample = 0;
+    for _ in 0..sampling_freq {
+        // try to write sample but retry if buffer is full
+        while !i2s.write(next_sample >> 5) {}
+
+        next_sample = generator.next();
+    }
+
+    led_pin.set_high().unwrap();
+    delay.delay_ms(1000);
+    led_pin.set_low().unwrap();
+
+    //// now configure and do it with the DMA instead!
+
+    // unreset the DMA peripheral & wait for it to become available
+    pac.RESETS.reset.modify(|_, w| w.dma().clear_bit());
+    while !pac.RESETS.reset_done.read().dma().bit_is_set() {}
+
+    // DMA channel can be 0 or 1, let's use channel 0 for now
+    // #define PICO_AUDIO_I2S_DMA_IRQ 0
+    let dma = &pac.DMA.ch[0];
+
+    // setup read & write address
+    dma.ch_write_addr
+        .write(|w| unsafe { w.bits(i2s.tx_addr() as u32) });
+    dma.ch_read_addr
+        .write(|w| unsafe { w.bits((&DMA_BUFFER as *const i16) as u32) });
+
+    // number of samples to take
+    // dma.ch_trans_count
+    //     .write(|w| unsafe { w.bits(16000 as u32) });
+
+    // setup the rest of the parameters
+
+    // writing to a non-triggering register to not trigger a new transfer
+    dma.ch_al1_ctrl.modify(|_, w| {
+        w.en()
+            .bit(true) // enable chanel
+            .data_size()
+            .size_halfword() // we are sending i16
+            .incr_write()
+            .clear_bit() // do not increment write address
+            .incr_read()
+            .set_bit(); // increment read address
+
+        unsafe { w.chain_to().bits(0) }; // Needs to be the same as the channel we are configuring
+
+        unsafe { w.treq_sel().bits(i2s.tx_dreq_value()) };
+
+        w
+    });
+
+    // write number of bytes and trigger!
+    dma.ch_al1_trans_count_trig
+        .write(|w| unsafe { w.bits(16000 as u32) });
+
+    // debug!("read_addr: {:?}", dma.ch_read_addr.read().bits());
+    // debug!("read_addr(desired): {:?}", i2s.tx_addr() as u32);
+    // debug!("write_addr: {:?}", dma.ch_write_addr.read().bits());
+    // debug!("incr_read: {:?}", dma.ch_ctrl_trig.read().incr_read().bit());
+    // debug!(
+    //     "incr_write: {:?}",
+    //     dma.ch_ctrl_trig.read().incr_write().bit()
+    // );
+    // debug!("en: {:?}", dma.ch_ctrl_trig.read().en().bit());
+    // debug!("treq: {:?}", dma.ch_al1_ctrl.read().treq_sel().bits());
+    // debug!("busy: {:?}", dma.ch_ctrl_trig.read().busy().bit());
+    // debug!("ahb_error: {:?}", dma.ch_ctrl_trig.read().ahb_error().bit());
+
+    while dma.ch_ctrl_trig.read().busy().bit_is_set() {
+        led_pin.set_high().unwrap();
+        delay.delay_ms(50);
+        led_pin.set_low().unwrap();
+        delay.delay_ms(100);
+    }
+
+    delay.delay_ms(1000);
+
     loop {
-        // push samples but do not advance if buffer is full
-        if i2s.write(next_sample >> 8) {
-            led_pin.set_high().unwrap();
-            next_sample = generator.next();
-        } else {
-            led_pin.set_low().unwrap();
-        }
+        led_pin.set_high().unwrap();
+        delay.delay_ms(100);
+        led_pin.set_low().unwrap();
+        delay.delay_ms(100);
     }
 }

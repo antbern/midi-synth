@@ -104,4 +104,12 @@ impl I2SOutput {
     pub fn write(&mut self, sample: i16) -> bool {
         self.tx.write(sample)
     }
+
+    pub fn tx_addr(&self) -> *const u32 {
+        self.tx.fifo_address()
+    }
+
+    pub fn tx_dreq_value(&self) -> u8 {
+        self.tx.dreq_value()
+    }
 }
