@@ -13,38 +13,32 @@ const DMA_B: u8 = 1;
 /// The number of samples in each of the two buffers used to double-buffer the audio output
 pub const BUFFER_LENGTH: usize = 16_000;
 
-static mut DMA_BUFFER: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
+static mut DMA_BUFFER_A: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
+static mut DMA_BUFFER_B: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
 
 // Need to use two DMA channels and two buffers, chained to trigger each other on completion. This way we get an interrupt "half-way" and can start filling the
 // unused buffer-half with new samples
 
-pub fn setup_double_buffered(
-    buffer_a_address: *const i16,
-    buffer_b_address: *const i16,
-    buffer_length: u32,
-    resets: &mut pac::RESETS,
-    dma: &pac::DMA,
-    i2s: &i2s::I2SOutput,
-) {
+pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s::I2SOutput) {
     // unreset the DMA peripheral & wait for it to become available
     resets.reset.modify(|_, w| w.dma().clear_bit());
     while !resets.reset_done.read().dma().bit_is_set() {}
 
     setup_channel(
         &dma.ch[DMA_A as usize],
-        buffer_a_address as u32,
+        (unsafe { &DMA_BUFFER_A } as *const i16) as u32,
         i2s.tx_addr() as u32,
-        buffer_length,
+        BUFFER_LENGTH as u32,
         DMA_B,
         i2s.tx_dreq_value(),
     );
 
     setup_channel(
         &dma.ch[DMA_B as usize],
-        buffer_b_address as u32,
+        (unsafe { &DMA_BUFFER_B } as *const i16) as u32,
         i2s.tx_addr() as u32,
-        buffer_length,
-        DMA_B, // TODO: should chain to DMA_A (DMA_B means no chaining)
+        BUFFER_LENGTH as u32,
+        DMA_A,
         i2s.tx_dreq_value(),
     );
 
@@ -91,8 +85,7 @@ fn setup_channel(
                         // enable IRQ
         w.irq_quiet().clear_bit();
 
-        unsafe { w.chain_to().bits(chain_to) }; // Needs to be the same as the channel we are configuring
-
+        unsafe { w.chain_to().bits(chain_to) };
         unsafe { w.treq_sel().bits(treq_value) };
 
         w
@@ -103,10 +96,7 @@ fn setup_channel(
 fn DMA_IRQ_0() {
     // check which DMA was triggered and reconfigure the other one + start filling in the relevant buffer
 
-    // TODO: reset the interrupt
-
-    // pac.DMA.ints0.modify
-    // SAFETY: we steal and write to a register not written to anywhere else
+    // SAFETY: we steal and write to a registers not written to anywhere else
     let p = unsafe { Peripherals::steal() };
 
     debug!("{:#02x}", p.DMA.ints0.read().ints0().bits());
@@ -119,15 +109,47 @@ fn DMA_IRQ_0() {
         // DMA A completed, reconfigure it by updating the read register
         debug!("IRQ0 TRIGGERED by DMA A");
 
-        // p.DMA.ch[DMA_A as usize]
-        //     .ch_read_addr
-        //     .write(|w| unsafe { w.bits(read_addr) });
+        p.DMA.ch[DMA_A as usize]
+            .ch_read_addr
+            .write(|w| unsafe { w.bits((&DMA_BUFFER_A as *const i16) as u32) });
+
+        // reset the interrupt
+
+        p.DMA
+            .ints0
+            .write(|w| unsafe { w.ints0().bits(1u16 << DMA_A) });
+
+        for i in 0..BUFFER_LENGTH {
+            unsafe {
+                DMA_BUFFER_A[i] = crate::DMA_BUFFER[i];
+            }
+        }
     } else if ints0 & (1u16 << DMA_B) != 0 {
         // DMA B completed, reconfigure it by updating the read register
         debug!("IRQ0 TRIGGERED by DMA B");
+
+        p.DMA.ch[DMA_B as usize]
+            .ch_read_addr
+            .write(|w| unsafe { w.bits((&DMA_BUFFER_B as *const i16) as u32) });
+
+        p.DMA
+            .ints0
+            .write(|w| unsafe { w.ints0().bits(1u16 << DMA_B) });
+
+        for i in 0..BUFFER_LENGTH {
+            unsafe {
+                DMA_BUFFER_B[i] = crate::DMA_BUFFER[i] >> 1;
+            }
+        }
     }
 
-    p.DMA
-        .ints0
-        .modify(|r, w| unsafe { w.ints0().bits(r.ints0().bits()) });
+    // TODO: fill the next buffer with the data HERE
+
+    // FIXME: copy from the global buffer
+    // for i in 0..BUFFER_LENGTH {
+    //     unsafe {
+    //         DMA_BUFFER_A[i] = crate::DMA_BUFFER[i];
+    //         DMA_BUFFER_B[i] = crate::DMA_BUFFER[i];
+    //     }
+    // }
 }

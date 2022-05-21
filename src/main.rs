@@ -18,22 +18,18 @@ use panic_probe as _;
 
 use rp_pico as bsp;
 
-use bsp::{
-    hal::{
-        self,
-        clocks::{init_clocks_and_plls, Clock},
-        gpio::{
-            bank0::{Gpio0, Gpio1},
-            FunctionUart,
-        },
-        pac,
-        pac::interrupt,
-        pio::PIOExt,
-        sio::Sio,
-        uart::{self, UartPeripheral},
-        watchdog::Watchdog,
+use bsp::hal::{
+    self,
+    clocks::{init_clocks_and_plls, Clock},
+    gpio::{
+        bank0::{Gpio0, Gpio1},
+        FunctionUart,
     },
-    pac::Peripherals,
+    pac,
+    pio::PIOExt,
+    sio::Sio,
+    uart::{self, UartPeripheral},
+    watchdog::Watchdog,
 };
 
 use crate::{generator::SineWave, i2s::I2SOutput};
@@ -147,14 +143,7 @@ fn main() -> ! {
 
     //// now configure and do it with the DMA instead!
 
-    dma::setup_double_buffered(
-        unsafe { &DMA_BUFFER } as *const i16,
-        unsafe { &DMA_BUFFER } as *const i16,
-        16000,
-        &mut pac.RESETS,
-        &pac.DMA,
-        &i2s,
-    );
+    dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
 
     // pac.DMA.ints0.modify(f)
 
