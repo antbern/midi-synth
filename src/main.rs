@@ -2,13 +2,14 @@
 #![no_main]
 
 mod defmt_uart;
+mod dma;
 mod generator;
 mod i2s;
 mod waveforms;
 
 use core::cell::RefCell;
 
-use cortex_m::interrupt::{self, Mutex};
+use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
@@ -17,18 +18,22 @@ use panic_probe as _;
 
 use rp_pico as bsp;
 
-use bsp::hal::{
-    self,
-    clocks::{init_clocks_and_plls, Clock},
-    gpio::{
-        bank0::{Gpio0, Gpio1},
-        FunctionUart,
+use bsp::{
+    hal::{
+        self,
+        clocks::{init_clocks_and_plls, Clock},
+        gpio::{
+            bank0::{Gpio0, Gpio1},
+            FunctionUart,
+        },
+        pac,
+        pac::interrupt,
+        pio::PIOExt,
+        sio::Sio,
+        uart::{self, UartPeripheral},
+        watchdog::Watchdog,
     },
-    pac,
-    pio::PIOExt,
-    sio::Sio,
-    uart::{self, UartPeripheral},
-    watchdog::Watchdog,
+    pac::Peripherals,
 };
 
 use crate::{generator::SineWave, i2s::I2SOutput};
@@ -92,7 +97,7 @@ fn main() -> ! {
     uart.write_full_blocking(b"Hello World!=n");
 
     // put the UART into the shared global
-    interrupt::free(|cs| {
+    cortex_m::interrupt::free(|cs| {
         GLOBAL_UART0.borrow(cs).replace(Some(uart));
     });
 
@@ -142,6 +147,19 @@ fn main() -> ! {
 
     //// now configure and do it with the DMA instead!
 
+    dma::setup_double_buffered(
+        unsafe { &DMA_BUFFER } as *const i16,
+        unsafe { &DMA_BUFFER } as *const i16,
+        16000,
+        &mut pac.RESETS,
+        &pac.DMA,
+        &i2s,
+    );
+
+    // pac.DMA.ints0.modify(f)
+
+    /*
+
     // unreset the DMA peripheral & wait for it to become available
     pac.RESETS.reset.modify(|_, w| w.dma().clear_bit());
     while !pac.RESETS.reset_done.read().dma().bit_is_set() {}
@@ -161,6 +179,7 @@ fn main() -> ! {
     //     .write(|w| unsafe { w.bits(16000 as u32) });
 
     // setup the rest of the parameters
+    // dma.ch_ctrl_trig
 
     // writing to a non-triggering register to not trigger a new transfer
     dma.ch_al1_ctrl.modify(|_, w| {
@@ -183,6 +202,7 @@ fn main() -> ! {
     // write number of bytes and trigger!
     dma.ch_al1_trans_count_trig
         .write(|w| unsafe { w.bits(16000 as u32) });
+        */
 
     // debug!("read_addr: {:?}", dma.ch_read_addr.read().bits());
     // debug!("read_addr(desired): {:?}", i2s.tx_addr() as u32);
@@ -197,7 +217,7 @@ fn main() -> ! {
     // debug!("busy: {:?}", dma.ch_ctrl_trig.read().busy().bit());
     // debug!("ahb_error: {:?}", dma.ch_ctrl_trig.read().ahb_error().bit());
 
-    while dma.ch_ctrl_trig.read().busy().bit_is_set() {
+    while pac.DMA.ch[0].ch_ctrl_trig.read().busy().bit_is_set() {
         led_pin.set_high().unwrap();
         delay.delay_ms(50);
         led_pin.set_low().unwrap();
