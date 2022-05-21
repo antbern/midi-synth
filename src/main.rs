@@ -222,3 +222,9 @@ fn main() -> ! {
         delay.delay_ms(100);
     }
 }
+
+fn FILL_BUFFER(buffer: &mut [i16]) {
+    for i in 0..buffer.len() {
+        buffer[i] = unsafe { DMA_BUFFER[i] };
+    }
+}

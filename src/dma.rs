@@ -13,11 +13,9 @@ const DMA_B: u8 = 1;
 /// The number of samples in each of the two buffers used to double-buffer the audio output
 pub const BUFFER_LENGTH: usize = 16_000;
 
+/// Private buffers used by the DMA's
 static mut DMA_BUFFER_A: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
 static mut DMA_BUFFER_B: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
-
-// Need to use two DMA channels and two buffers, chained to trigger each other on completion. This way we get an interrupt "half-way" and can start filling the
-// unused buffer-half with new samples
 
 pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s::I2SOutput) {
     // unreset the DMA peripheral & wait for it to become available
@@ -41,6 +39,10 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
         DMA_A,
         i2s.tx_dreq_value(),
     );
+
+    // make sure buffers are initialized
+    crate::FILL_BUFFER(unsafe { DMA_BUFFER_A.as_mut_slice() });
+    crate::FILL_BUFFER(unsafe { DMA_BUFFER_B.as_mut_slice() });
 
     // enable interrupts
     dma.inte0
@@ -99,57 +101,34 @@ fn DMA_IRQ_0() {
     // SAFETY: we steal and write to a registers not written to anywhere else
     let p = unsafe { Peripherals::steal() };
 
-    debug!("{:#02x}", p.DMA.ints0.read().ints0().bits());
-
     // check which DMA channel that triggered the interrupt to reconfigure the other one
 
     let ints0 = p.DMA.ints0.read().ints0().bits();
-
-    if ints0 & (1u16 << DMA_A) != 0 {
-        // DMA A completed, reconfigure it by updating the read register
-        debug!("IRQ0 TRIGGERED by DMA A");
-
-        p.DMA.ch[DMA_A as usize]
-            .ch_read_addr
-            .write(|w| unsafe { w.bits((&DMA_BUFFER_A as *const i16) as u32) });
-
-        // reset the interrupt
-
-        p.DMA
-            .ints0
-            .write(|w| unsafe { w.ints0().bits(1u16 << DMA_A) });
-
-        for i in 0..BUFFER_LENGTH {
-            unsafe {
-                DMA_BUFFER_A[i] = crate::DMA_BUFFER[i];
-            }
-        }
-    } else if ints0 & (1u16 << DMA_B) != 0 {
-        // DMA B completed, reconfigure it by updating the read register
-        debug!("IRQ0 TRIGGERED by DMA B");
-
-        p.DMA.ch[DMA_B as usize]
-            .ch_read_addr
-            .write(|w| unsafe { w.bits((&DMA_BUFFER_B as *const i16) as u32) });
-
-        p.DMA
-            .ints0
-            .write(|w| unsafe { w.ints0().bits(1u16 << DMA_B) });
-
-        for i in 0..BUFFER_LENGTH {
-            unsafe {
-                DMA_BUFFER_B[i] = crate::DMA_BUFFER[i] >> 1;
-            }
-        }
+    // if it was not triggered by any of our DMA channels, just return
+    if ints0 & (1u16 << DMA_A | 1u16 << DMA_B) == 0 {
+        debug!("DMA_IRQ_0 interrupt happened, but not by DMA_A or DMA_B!");
+        return;
     }
 
-    // TODO: fill the next buffer with the data HERE
+    // extract which DMA that completed so that it can be reconfigured
+    let (dma, buffer) = if ints0 & (1u16 << DMA_A) != 0 {
+        (DMA_A, unsafe { &mut DMA_BUFFER_A })
+    } else {
+        (DMA_B, unsafe { &mut DMA_BUFFER_B })
+    };
 
-    // FIXME: copy from the global buffer
-    // for i in 0..BUFFER_LENGTH {
-    //     unsafe {
-    //         DMA_BUFFER_A[i] = crate::DMA_BUFFER[i];
-    //         DMA_BUFFER_B[i] = crate::DMA_BUFFER[i];
-    //     }
-    // }
+    debug!("IRQ0 TRIGGERED by DMA {}", dma);
+
+    // reconfigure the read addres of the completed DMA channel
+    p.DMA.ch[dma as usize]
+        .ch_read_addr
+        .write(|w| unsafe { w.bits((buffer as *const i16) as u32) });
+
+    // reset the interrupt
+    p.DMA
+        .ints0
+        .write(|w| unsafe { w.ints0().bits(1u16 << dma) });
+
+    // fill the next buffer with the data HERE
+    crate::FILL_BUFFER(buffer.as_mut_slice());
 }
