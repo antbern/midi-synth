@@ -5,6 +5,7 @@ mod defmt_uart;
 mod dma;
 mod generator;
 mod i2s;
+mod midi;
 mod waveforms;
 
 use core::cell::RefCell;
@@ -13,7 +14,7 @@ use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
-use embedded_time::fixed_point::FixedPoint;
+use embedded_time::{fixed_point::FixedPoint, rate::Baud};
 use panic_probe as _;
 
 use rp_pico as bsp;
@@ -22,7 +23,7 @@ use bsp::hal::{
     self,
     clocks::{init_clocks_and_plls, Clock},
     gpio::{
-        bank0::{Gpio0, Gpio1},
+        bank0::{Gpio0, Gpio1, Gpio8, Gpio9},
         FunctionUart,
     },
     pac,
@@ -35,16 +36,23 @@ use bsp::hal::{
 use crate::{generator::SineWave, i2s::I2SOutput};
 
 /// Alias the type for our UART pins to make things clearer.
-type UartPins = (
+type Uart0Pins = (
     hal::gpio::Pin<Gpio0, hal::gpio::Function<hal::gpio::Uart>>,
     hal::gpio::Pin<Gpio1, hal::gpio::Function<hal::gpio::Uart>>,
 );
 
+type Uart1Pins = (
+    hal::gpio::Pin<Gpio8, hal::gpio::Function<hal::gpio::Uart>>,
+    hal::gpio::Pin<Gpio9, hal::gpio::Function<hal::gpio::Uart>>,
+);
+
 /// Alias the type for our UART to make things clearer.
-type Uart = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART0, UartPins>;
+type Uart0 = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART0, Uart0Pins>;
+type Uart1 = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART1, Uart1Pins>;
 
 /// Shared UART object so that it can be accessed from defmt
-static GLOBAL_UART0: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
+static GLOBAL_UART0: Mutex<RefCell<Option<Uart0>>> = Mutex::new(RefCell::new(None));
+static GLOBAL_UART1: Mutex<RefCell<Option<Uart1>>> = Mutex::new(RefCell::new(None));
 
 static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
 
@@ -95,6 +103,30 @@ fn main() -> ! {
     // put the UART into the shared global
     cortex_m::interrupt::free(|cs| {
         GLOBAL_UART0.borrow(cs).replace(Some(uart));
+    });
+
+    // Open UART for incoming MIDI messages
+    let uart_pins = (
+        pins.gpio8.into_mode::<FunctionUart>(),
+        pins.gpio9.into_mode::<FunctionUart>(),
+    );
+
+    // hackish way to create a configuration with a custom baudrate (since UartConfig is declared `#[non_exhaustive]`)
+    let mut midi_config = uart::common_configs::_9600_8_N_1;
+    midi_config.baudrate = Baud(31250);
+
+    let mut uart_midi = UartPeripheral::new(pac.UART1, uart_pins, &mut pac.RESETS)
+        .enable(midi_config, clocks.peripheral_clock.freq())
+        .unwrap();
+
+    uart_midi.enable_rx_interrupt();
+
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::UART1_IRQ);
+    }
+    // put the UART into the shared global
+    cortex_m::interrupt::free(|cs| {
+        GLOBAL_UART1.borrow(cs).replace(Some(uart_midi));
     });
 
     // UART is now initialized, and we can start using defmt macros!
