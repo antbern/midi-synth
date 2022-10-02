@@ -145,67 +145,6 @@ fn main() -> ! {
 
     dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
 
-    // pac.DMA.ints0.modify(f)
-
-    /*
-
-    // unreset the DMA peripheral & wait for it to become available
-    pac.RESETS.reset.modify(|_, w| w.dma().clear_bit());
-    while !pac.RESETS.reset_done.read().dma().bit_is_set() {}
-
-    // DMA channel can be 0 or 1, let's use channel 0 for now
-    // #define PICO_AUDIO_I2S_DMA_IRQ 0
-    let dma = &pac.DMA.ch[0];
-
-    // setup read & write address
-    dma.ch_write_addr
-        .write(|w| unsafe { w.bits(i2s.tx_addr() as u32) });
-    dma.ch_read_addr
-        .write(|w| unsafe { w.bits((&DMA_BUFFER as *const i16) as u32) });
-
-    // number of samples to take
-    // dma.ch_trans_count
-    //     .write(|w| unsafe { w.bits(16000 as u32) });
-
-    // setup the rest of the parameters
-    // dma.ch_ctrl_trig
-
-    // writing to a non-triggering register to not trigger a new transfer
-    dma.ch_al1_ctrl.modify(|_, w| {
-        w.en()
-            .bit(true) // enable chanel
-            .data_size()
-            .size_halfword() // we are sending i16
-            .incr_write()
-            .clear_bit() // do not increment write address
-            .incr_read()
-            .set_bit(); // increment read address
-
-        unsafe { w.chain_to().bits(0) }; // Needs to be the same as the channel we are configuring
-
-        unsafe { w.treq_sel().bits(i2s.tx_dreq_value()) };
-
-        w
-    });
-
-    // write number of bytes and trigger!
-    dma.ch_al1_trans_count_trig
-        .write(|w| unsafe { w.bits(16000 as u32) });
-        */
-
-    // debug!("read_addr: {:?}", dma.ch_read_addr.read().bits());
-    // debug!("read_addr(desired): {:?}", i2s.tx_addr() as u32);
-    // debug!("write_addr: {:?}", dma.ch_write_addr.read().bits());
-    // debug!("incr_read: {:?}", dma.ch_ctrl_trig.read().incr_read().bit());
-    // debug!(
-    //     "incr_write: {:?}",
-    //     dma.ch_ctrl_trig.read().incr_write().bit()
-    // );
-    // debug!("en: {:?}", dma.ch_ctrl_trig.read().en().bit());
-    // debug!("treq: {:?}", dma.ch_al1_ctrl.read().treq_sel().bits());
-    // debug!("busy: {:?}", dma.ch_ctrl_trig.read().busy().bit());
-    // debug!("ahb_error: {:?}", dma.ch_ctrl_trig.read().ahb_error().bit());
-
     while pac.DMA.ch[0].ch_ctrl_trig.read().busy().bit_is_set() {
         led_pin.set_high().unwrap();
         delay.delay_ms(50);

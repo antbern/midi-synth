@@ -4,8 +4,9 @@
         {
             "preLaunchTask": "Cargo build",
             "name": "Pico Debug",
+            "showDevDebugOutput": "raw",
             "device": "RP2040",
-            "numberOfProcessors": 2,
+            "numberOfProcessors": 1,
             "gdbPath": "arm-none-eabi-gdb",
             "cwd": "${workspaceRoot}",
             "executable": "${workspaceRoot}/target/thumbv6m-none-eabi/debug/pico-midi-synth",
