@@ -61,13 +61,10 @@ impl I2SOutput {
 
         // calculate the PIO frequency required for the desired sampling_frequency
         // taken from the official example
-        let system_clock_frequency = clocks.system_clock.freq().0;
+        let system_clock_frequency = clocks.system_clock.freq().to_Hz();
         core::assert!(system_clock_frequency < 0x40000000);
         let divider = system_clock_frequency * 4 / sampling_freq; // avoid arithmetic overflow
         core::assert!(divider < 0x1000000);
-
-        // construct the input the call to clock_divisor() below expects (a bit cumbersome)
-        let divisor = (divider >> 8) as f32 + (divider & 0xff) as f32 / 256.0;
 
         // finally setup the PIO program with program-specific details
         let (mut sm, _rx, mut tx) = PIOBuilder::from_program(installed)
@@ -76,7 +73,7 @@ impl I2SOutput {
             .out_shift_direction(ShiftDirection::Left)
             .autopull(true)
             .pull_threshold(32)
-            .clock_divisor(divisor)
+            .clock_divisor_fixed_point((divider >> 8) as u16, (divider & 0xff) as u8)
             .buffers(Buffers::OnlyTx)
             .build(sm0);
 
@@ -88,13 +85,14 @@ impl I2SOutput {
         ]);
 
         // needed to get the execution to start at the right point (as done in the example)
-        sm.exec_instruction(
-            pio::InstructionOperands::JMP {
+        sm.exec_instruction(pio::Instruction {
+            operands: pio::InstructionOperands::JMP {
                 condition: pio::JmpCondition::Always,
                 address: offset + entry_point,
-            }
-            .encode(),
-        );
+            },
+            delay: 0,
+            side_set: Some(0),
+        });
 
         let sm = sm.start();
 
@@ -102,7 +100,7 @@ impl I2SOutput {
     }
 
     pub fn write(&mut self, sample: i16) -> bool {
-        self.tx.write(sample)
+        self.tx.write_u16_replicated(sample as u16)
     }
 
     pub fn tx_addr(&self) -> *const u32 {

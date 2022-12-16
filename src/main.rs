@@ -16,7 +16,7 @@ use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
-use embedded_time::{fixed_point::FixedPoint, rate::Baud};
+
 use midi::MidiCommand;
 use panic_probe as _;
 
@@ -33,9 +33,10 @@ use bsp::hal::{
     pac,
     pio::PIOExt,
     sio::Sio,
-    uart::{self, UartPeripheral},
+    uart::{DataBits, StopBits, UartConfig, UartPeripheral},
     watchdog::Watchdog,
 };
+use fugit::RateExtU32;
 use util::GlobalCell;
 
 use crate::{generator::SineWave, i2s::I2SOutput};
@@ -86,7 +87,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
@@ -102,7 +103,7 @@ fn main() -> ! {
 
     let uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
-            uart::common_configs::_115200_8_N_1,
+            UartConfig::new(115200.Hz(), DataBits::Eight, None, StopBits::One),
             clocks.peripheral_clock.freq(),
         )
         .unwrap();
@@ -120,12 +121,11 @@ fn main() -> ! {
         pins.gpio9.into_mode::<FunctionUart>(),
     );
 
-    // hackish way to create a configuration with a custom baudrate (since UartConfig is declared `#[non_exhaustive]`)
-    let mut midi_config = uart::common_configs::_9600_8_N_1;
-    midi_config.baudrate = Baud(31250);
-
     let mut uart_midi = UartPeripheral::new(pac.UART1, uart_pins, &mut pac.RESETS)
-        .enable(midi_config, clocks.peripheral_clock.freq())
+        .enable(
+            UartConfig::new(31250.Hz(), DataBits::Eight, None, StopBits::One),
+            clocks.peripheral_clock.freq(),
+        )
         .unwrap();
 
     uart_midi.enable_rx_interrupt();
@@ -159,7 +159,7 @@ fn main() -> ! {
 
     // fill the buffer first
 
-    let mut generator = SineWave::new(sampling_freq as f32, 440 as f32);
+    let mut generator = SineWave::new(sampling_freq as f32, 440_f32);
 
     for i in 0..unsafe { DMA_BUFFER.len() } {
         let sample = generator.next();
