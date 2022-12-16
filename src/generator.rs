@@ -1,4 +1,43 @@
-use crate::waveforms::SINE_TABLE;
+use crate::{
+    adsr::{Parameters, PianoEnvelope},
+    waveforms::SINE_TABLE,
+};
+
+pub struct EnvelopedGenerator {
+    oscillator: SineWave,
+    envelope: PianoEnvelope,
+}
+
+impl EnvelopedGenerator {
+    pub fn new(sample_rate: f32, frequency: f32, params: Parameters) -> EnvelopedGenerator {
+        EnvelopedGenerator {
+            oscillator: SineWave::new(sample_rate, frequency),
+            envelope: PianoEnvelope::new(sample_rate, params, 2.0),
+        }
+    }
+
+    pub fn key_down(&mut self, velocity: u8) {
+        self.envelope.key_down(velocity)
+    }
+
+    pub fn key_up(&mut self) {
+        self.envelope.key_up()
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.envelope.is_active()
+    }
+
+    pub fn next(&mut self) -> i16 {
+        // convert envelope in value 0-1 to i16 in range 0-256
+        let env = (self.envelope.next_sample(false) * 256.0) as i16;
+
+        let sample = self.oscillator.next();
+
+        // fast multiplication, treating the 256 as "1"
+        ((sample as i32).wrapping_mul(env as i32) >> 8) as i16 // div 256
+    }
+}
 
 ///
 ///

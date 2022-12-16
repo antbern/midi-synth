@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod adsr;
 mod defmt_uart;
 mod dma;
 mod generator;
@@ -17,6 +18,7 @@ use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
 
+use generator::EnvelopedGenerator;
 use midi::MidiCommand;
 use panic_probe as _;
 
@@ -39,7 +41,7 @@ use bsp::hal::{
 use fugit::RateExtU32;
 use util::GlobalCell;
 
-use crate::{generator::SineWave, i2s::I2SOutput};
+use crate::{adsr::Parameters, generator::SineWave, i2s::I2SOutput};
 
 /// Alias the type for our UART pins to make things clearer.
 type Uart0Pins = (
@@ -186,16 +188,20 @@ fn main() -> ! {
 
     // SAFETY: from https://doc.rust-lang.org/stable/std/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
     let generators = {
-        let mut generators: [core::mem::MaybeUninit<SineWave>; MIDI_KEYS] =
+        let mut generators: [core::mem::MaybeUninit<EnvelopedGenerator>; MIDI_KEYS] =
             unsafe { core::mem::MaybeUninit::uninit().assume_init() };
 
         for (key, g) in &mut generators[..].iter_mut().enumerate() {
             let freq = midi::KEY_CENTER_FREQ[key as usize] as f32;
 
-            g.write(SineWave::new(sampling_freq as f32, freq as f32));
+            g.write(EnvelopedGenerator::new(
+                sampling_freq as f32,
+                freq as f32,
+                Parameters::new(0.2, 0.1, 0.9, 0.3, sampling_freq as f32),
+            ));
         }
 
-        unsafe { core::mem::transmute::<_, [SineWave; MIDI_KEYS]>(generators) }
+        unsafe { core::mem::transmute::<_, [EnvelopedGenerator; MIDI_KEYS]>(generators) }
     };
 
     // SAFETY: we access this before the interrupt that uses this has a chance to get called
@@ -236,15 +242,18 @@ fn main() -> ! {
                 use MidiCommand::*;
                 // update state based on commants
                 match cmd {
-                    NoteOn(key, _vel) => {
+                    NoteOn(key, vel) => {
                         state.key_on[key as usize] = true;
+                        if let Some(g) = unsafe { &mut GENERATORS } {
+                            g[key as usize].key_down(vel)
+                        }
                     }
                     NoteOff(key, _vel) => {
                         state.key_on[key as usize] = false;
                         // TODO: reset the freq generator on
 
                         if let Some(g) = unsafe { &mut GENERATORS } {
-                            g[key as usize].reset()
+                            g[key as usize].key_up()
                         }
                     }
                     _ => {}
@@ -275,9 +284,11 @@ fn main() -> ! {
     }
 }
 
+// struct MidiEngine {}
+
 static STATE: GlobalCell<MidiState> = GlobalCell::new(None);
 
-static mut GENERATORS: Option<[SineWave; MIDI_KEYS]> = None;
+static mut GENERATORS: Option<[EnvelopedGenerator; MIDI_KEYS]> = None;
 
 #[derive(Clone)]
 struct MidiState {
@@ -294,8 +305,8 @@ fn FILL_BUFFER(buffer: &mut [i16]) {
 
                 let mut sample = 0i32;
 
-                for (k, on) in state.key_on.iter().enumerate().filter(|(_k, &on)| on) {
-                    sample += g[k as usize].next() as i32;
+                for gen in g.iter_mut().filter(|g| g.is_active()) {
+                    sample += gen.next() as i32
                 }
 
                 // generate the samples
