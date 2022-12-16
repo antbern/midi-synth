@@ -6,6 +6,8 @@ mod dma;
 mod generator;
 mod i2s;
 mod midi;
+mod queue;
+mod util;
 mod waveforms;
 
 use core::cell::RefCell;
@@ -15,8 +17,10 @@ use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_time::{fixed_point::FixedPoint, rate::Baud};
+use midi::MidiCommand;
 use panic_probe as _;
 
+use queue::Queue;
 use rp_pico as bsp;
 
 use bsp::hal::{
@@ -32,6 +36,7 @@ use bsp::hal::{
     uart::{self, UartPeripheral},
     watchdog::Watchdog,
 };
+use util::GlobalCell;
 
 use crate::{generator::SineWave, i2s::I2SOutput};
 
@@ -54,7 +59,11 @@ type Uart1 = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART1, Uart1Pins
 static GLOBAL_UART0: Mutex<RefCell<Option<Uart0>>> = Mutex::new(RefCell::new(None));
 static GLOBAL_UART1: Mutex<RefCell<Option<Uart1>>> = Mutex::new(RefCell::new(None));
 
+static MIDI_COMMAND_BUFFER: Queue<32, MidiCommand> = Queue::new();
+
 static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
+
+const MIDI_KEYS: usize = 127;
 
 #[entry]
 fn main() -> ! {
@@ -173,6 +182,25 @@ fn main() -> ! {
     delay.delay_ms(1000);
     led_pin.set_low().unwrap();
 
+    // setup one generator for each key
+
+    // SAFETY: from https://doc.rust-lang.org/stable/std/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
+    let generators = {
+        let mut generators: [core::mem::MaybeUninit<SineWave>; MIDI_KEYS] =
+            unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+
+        for (key, g) in &mut generators[..].iter_mut().enumerate() {
+            let freq = midi::KEY_CENTER_FREQ[key as usize] as f32;
+
+            g.write(SineWave::new(sampling_freq as f32, freq as f32));
+        }
+
+        unsafe { core::mem::transmute::<_, [SineWave; MIDI_KEYS]>(generators) }
+    };
+
+    // SAFETY: we access this before the interrupt that uses this has a chance to get called
+    unsafe { GENERATORS.replace(generators) };
+
     //// now configure and do it with the DMA instead!
 
     dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
@@ -182,6 +210,59 @@ fn main() -> ! {
         delay.delay_ms(50);
         led_pin.set_low().unwrap();
         delay.delay_ms(100);
+    }
+
+    // cortex_m::asm::wfi();
+
+    // big loop for keeping track of pressed keys
+    // let mut key_on = [false; MIDI_KEYS];
+
+    // put something into the state
+    cortex_m::interrupt::free(|cs| {
+        STATE.put_cs(
+            cs,
+            MidiState {
+                key_on: [false; MIDI_KEYS],
+            },
+        )
+    });
+
+    loop {
+        if let Some(mut state) =
+            cortex_m::interrupt::free(|cs| STATE.try_borrow_mut(cs, |s| Some(s.clone())))
+        {
+            // handle all pending Midi Commands
+            while let Some(cmd) = cortex_m::interrupt::free(|cs| MIDI_COMMAND_BUFFER.take(cs)) {
+                use MidiCommand::*;
+                // update state based on commants
+                match cmd {
+                    NoteOn(key, _vel) => {
+                        state.key_on[key as usize] = true;
+                    }
+                    NoteOff(key, _vel) => {
+                        state.key_on[key as usize] = false;
+                        // TODO: reset the freq generator on
+
+                        if let Some(g) = unsafe { &mut GENERATORS } {
+                            g[key as usize].reset()
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // update global version of the state here
+            cortex_m::interrupt::free(|cs| {
+                STATE.try_borrow_mut(cs, |s| {
+                    for (i, v) in state.key_on.iter().enumerate() {
+                        s.key_on[i] = *v;
+                    }
+                    Some(0)
+                });
+            });
+        }
+
+        // use the current state to generate samples?
     }
 
     delay.delay_ms(1000);
@@ -194,8 +275,32 @@ fn main() -> ! {
     }
 }
 
+static STATE: GlobalCell<MidiState> = GlobalCell::new(None);
+
+static mut GENERATORS: Option<[SineWave; MIDI_KEYS]> = None;
+
+#[derive(Clone)]
+struct MidiState {
+    key_on: [bool; MIDI_KEYS],
+}
 fn FILL_BUFFER(buffer: &mut [i16]) {
-    for i in 0..buffer.len() {
-        buffer[i] = unsafe { DMA_BUFFER[i] };
+    // get the current state of the midi engine
+    if let Some(state) =
+        cortex_m::interrupt::free(|cs| STATE.try_borrow_mut(cs, |s| Some(s.clone())))
+    {
+        if let Some(g) = unsafe { &mut GENERATORS } {
+            for i in 0..buffer.len() {
+                // and compute the next sample
+
+                let mut sample = 0i32;
+
+                for (k, on) in state.key_on.iter().enumerate().filter(|(_k, &on)| on) {
+                    sample += g[k as usize].next() as i32;
+                }
+
+                // generate the samples
+                buffer[i] = (sample >> 3) as i16;
+            }
+        }
     }
 }

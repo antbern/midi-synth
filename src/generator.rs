@@ -24,6 +24,10 @@ impl SineWave {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.cur_offset = 0;
+    }
+
     pub fn next(&mut self) -> i16 {
         let val = self.cur_offset as u32;
 
