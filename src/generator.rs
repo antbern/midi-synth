@@ -28,9 +28,9 @@ impl EnvelopedGenerator {
         self.envelope.is_active()
     }
 
-    pub fn next(&mut self) -> i16 {
+    pub fn next(&mut self, sustain: bool) -> i16 {
         // convert envelope in value 0-1 to i16 in range 0-256
-        let env = (self.envelope.next_sample(false) * 256.0) as i16;
+        let env = (self.envelope.next_sample(sustain) * 256.0) as i16;
 
         let sample = self.oscillator.next();
 

@@ -67,6 +67,7 @@ static MIDI_COMMAND_BUFFER: Queue<32, MidiCommand> = Queue::new();
 static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
 
 const MIDI_KEYS: usize = 127;
+const CC_SUSTAIN: u8 = 64u8;
 
 #[entry]
 fn main() -> ! {
@@ -228,7 +229,8 @@ fn main() -> ! {
         STATE.put_cs(
             cs,
             MidiState {
-                key_on: [false; MIDI_KEYS],
+                volume: 64, // 50%
+                sustain: false,
             },
         )
     });
@@ -243,19 +245,17 @@ fn main() -> ! {
                 // update state based on commants
                 match cmd {
                     NoteOn(key, vel) => {
-                        state.key_on[key as usize] = true;
                         if let Some(g) = unsafe { &mut GENERATORS } {
                             g[key as usize].key_down(vel)
                         }
                     }
                     NoteOff(key, _vel) => {
-                        state.key_on[key as usize] = false;
-                        // TODO: reset the freq generator on
-
                         if let Some(g) = unsafe { &mut GENERATORS } {
                             g[key as usize].key_up()
                         }
                     }
+                    ContinousController(1, val) => state.volume = val as i16, // volume / modulation wheel
+                    ContinousController(CC_SUSTAIN, val) => state.sustain = val > 0, // sustain pedal
                     _ => {}
                 }
             }
@@ -263,9 +263,8 @@ fn main() -> ! {
             // update global version of the state here
             cortex_m::interrupt::free(|cs| {
                 STATE.try_borrow_mut(cs, |s| {
-                    for (i, v) in state.key_on.iter().enumerate() {
-                        s.key_on[i] = *v;
-                    }
+                    s.sustain = state.sustain;
+                    s.volume = state.volume;
                     Some(0)
                 });
             });
@@ -292,7 +291,8 @@ static mut GENERATORS: Option<[EnvelopedGenerator; MIDI_KEYS]> = None;
 
 #[derive(Clone)]
 struct MidiState {
-    key_on: [bool; MIDI_KEYS],
+    volume: i16,
+    sustain: bool,
 }
 fn FILL_BUFFER(buffer: &mut [i16]) {
     // get the current state of the midi engine
@@ -306,11 +306,14 @@ fn FILL_BUFFER(buffer: &mut [i16]) {
                 let mut sample = 0i32;
 
                 for gen in g.iter_mut().filter(|g| g.is_active()) {
-                    sample += gen.next() as i32
+                    sample += gen.next(state.sustain) as i32
                 }
 
+                // apply volume control: Volume is 0-127, so double that to get 0-254 and we can do fast scaling
+                let sample = sample.wrapping_mul(state.volume as i32) >> 8;
+
                 // generate the samples
-                buffer[i] = (sample >> 3) as i16;
+                buffer[i] = (sample >> 2) as i16;
             }
         }
     }

@@ -11,7 +11,7 @@ const DMA_A: u8 = 0;
 const DMA_B: u8 = 1;
 
 /// The number of samples in each of the two buffers used to double-buffer the audio output
-pub const BUFFER_LENGTH: usize = 160;
+pub const BUFFER_LENGTH: usize = 64;
 
 /// Private buffers used by the DMA's
 static mut DMA_BUFFER_A: [i16; BUFFER_LENGTH] = [0; BUFFER_LENGTH];
