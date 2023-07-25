@@ -14,16 +14,17 @@
             "type": "cortex-debug",
             "servertype": "openocd",
             "configFiles": [
-                "interface/picoprobe.cfg",
+                "interface/cmsis-dap.cfg",
                 "target/rp2040-core0.cfg"
             ],
             // "servertype": "external",
             // "gdbTarget": "localhost:3333",
-            // "openOCDLaunchCommands": [
-            //     "transport select swd",
-            //     "adapter speed 4000"
-            // ],
+            "openOCDLaunchCommands": [
+                "transport select swd",
+                "adapter speed 10000"
+            ],
             "svdFile": "${env:PICO_HOME}/svd/rp2040.svd",
+            // "svdFile": "/home/antbern/pico/svd/rp2040.svd",
             "preLaunchCommands": [
                 "monitor init",
                 "monitor reset init",
