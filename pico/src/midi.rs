@@ -14,7 +14,6 @@ impl defmt::Format for MidiCommandFmt {
     fn format(&self, fmt: Formatter) {
         match self.0 {
             midi::MidiCommand::NoteOff(a, b) => defmt::write!(fmt, "NoteOff ({},{})", a, b),
-
             midi::MidiCommand::NoteOn(a, b) => defmt::write!(fmt, "NoteOn ({},{})", a, b),
             midi::MidiCommand::Aftertouch(a, b) => defmt::write!(fmt, "Aftertouch ({},{})", a, b),
             midi::MidiCommand::ContinousController(a, b) => {

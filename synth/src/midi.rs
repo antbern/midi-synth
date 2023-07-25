@@ -1,4 +1,13 @@
-/// Module for basic Midi commands
+/// Module for basic Midi commands and constants
+
+/// The CC channel used for volume control
+pub const CC_VOLUME: u8 = 1u8;
+
+/// The CC channel used for sustain pedal messages
+pub const CC_SUSTAIN: u8 = 64u8;
+
+// The number of Midi keys available
+pub const MIDI_KEYS: usize = 127;
 
 #[derive(Clone, Copy, Debug)]
 pub enum MidiCommand {

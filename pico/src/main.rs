@@ -36,7 +36,7 @@ use bsp::hal::{
 use fugit::RateExtU32;
 use util::GlobalCell;
 
-use synth::{adsr::Parameters, generator::EnvelopedGenerator, generator::SineWave};
+use synth::engine::{MidiEngine, SimpleMidiEngine};
 
 /// Alias the type for our UART pins to make things clearer.
 type Uart0Pins = (
@@ -58,11 +58,6 @@ static GLOBAL_UART0: Mutex<RefCell<Option<Uart0>>> = Mutex::new(RefCell::new(Non
 static GLOBAL_UART1: Mutex<RefCell<Option<Uart1>>> = Mutex::new(RefCell::new(None));
 
 static MIDI_COMMAND_BUFFER: Queue<32, synth::midi::MidiCommand> = Queue::new();
-
-static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
-
-const MIDI_KEYS: usize = 127;
-const CC_SUSTAIN: u8 = 64u8;
 
 #[entry]
 fn main() -> ! {
@@ -113,7 +108,7 @@ fn main() -> ! {
         GLOBAL_UART0.borrow(cs).replace(Some(uart));
     });
 
-    // Open UART for incoming MIDI messages
+    // Open UART for incoming MIDI messages (uses pin 9 for RX only)
     let uart_pins = (
         pins.gpio8.into_mode::<FunctionUart>(),
         pins.gpio9.into_mode::<FunctionUart>(),
@@ -128,22 +123,24 @@ fn main() -> ! {
 
     uart_midi.enable_rx_interrupt();
 
-    unsafe {
-        pac::NVIC::unmask(pac::Interrupt::UART1_IRQ);
-    }
     // put the UART into the shared global
     cortex_m::interrupt::free(|cs| {
         GLOBAL_UART1.borrow(cs).replace(Some(uart_midi));
     });
 
+    // finally enable the interrupt in the NVIC
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::UART1_IRQ);
+    }
+
     // UART is now initialized, and we can start using defmt macros!
     info!("Program start");
     let mut led_pin = pins.led.into_push_pull_output();
 
-    let sampling_freq = 16_000;
+    let sampling_freq = 16_000 * 2;
 
     let (pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
-    let mut i2s = i2s::I2SOutput::new(
+    let i2s = i2s::I2SOutput::new(
         (
             pins.gpio2.into_mode(),
             pins.gpio3.into_mode(),
@@ -155,56 +152,6 @@ fn main() -> ! {
         sm0,
     );
 
-    // fill the buffer first
-
-    let mut generator = SineWave::new(sampling_freq as f32, 440_f32);
-
-    for i in 0..unsafe { DMA_BUFFER.len() } {
-        let sample = generator.next();
-        let sample = sample >> 5; // adjust volume
-
-        // SAFETY: we are only writing to this once, while no one else is doing it
-        unsafe { DMA_BUFFER[i] = sample };
-    }
-
-    //// test direct I2S output first
-    let mut next_sample = 0;
-    for _ in 0..sampling_freq {
-        // try to write sample but retry if buffer is full
-        while !i2s.write(next_sample >> 5) {}
-
-        next_sample = generator.next();
-    }
-
-    led_pin.set_high().unwrap();
-    delay.delay_ms(1000);
-    led_pin.set_low().unwrap();
-
-    // setup one generator for each key
-
-    // SAFETY: from https://doc.rust-lang.org/stable/std/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
-    let generators = {
-        let mut generators: [core::mem::MaybeUninit<EnvelopedGenerator>; MIDI_KEYS] =
-            unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-
-        for (key, g) in &mut generators[..].iter_mut().enumerate() {
-            let freq = synth::midi::KEY_CENTER_FREQ[key as usize] as f32;
-
-            g.write(EnvelopedGenerator::new(
-                sampling_freq as f32,
-                freq as f32,
-                Parameters::new(0.2, 0.1, 0.9, 0.3, sampling_freq as f32),
-            ));
-        }
-
-        unsafe { core::mem::transmute::<_, [EnvelopedGenerator; MIDI_KEYS]>(generators) }
-    };
-
-    // SAFETY: we access this before the interrupt that uses this has a chance to get called
-    unsafe { GENERATORS.replace(generators) };
-
-    //// now configure and do it with the DMA instead!
-
     dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
 
     while pac.DMA.ch[0].ch_ctrl_trig.read().busy().bit_is_set() {
@@ -214,52 +161,15 @@ fn main() -> ! {
         delay.delay_ms(100);
     }
 
-    // cortex_m::asm::wfi();
-
-    // big loop for keeping track of pressed keys
-    // let mut key_on = [false; MIDI_KEYS];
-
-    // put something into the state
-    cortex_m::interrupt::free(|cs| {
-        STATE.put_cs(
-            cs,
-            MidiState {
-                volume: 64, // 50%
-                sustain: false,
-            },
-        )
-    });
+    // initialize the engine
+    cortex_m::interrupt::free(|cs| ENGINE.put_cs(cs, SimpleMidiEngine::new(sampling_freq as f32)));
 
     loop {
-        if let Some(mut state) =
-            cortex_m::interrupt::free(|cs| STATE.try_borrow_mut(cs, |s| Some(s.clone())))
-        {
-            // handle all pending Midi Commands
-            while let Some(cmd) = cortex_m::interrupt::free(|cs| MIDI_COMMAND_BUFFER.take(cs)) {
-                use synth::midi::MidiCommand::*;
-                // update state based on commants
-                match cmd {
-                    NoteOn(key, vel) => {
-                        if let Some(g) = unsafe { &mut GENERATORS } {
-                            g[key as usize].key_down(vel)
-                        }
-                    }
-                    NoteOff(key, _vel) => {
-                        if let Some(g) = unsafe { &mut GENERATORS } {
-                            g[key as usize].key_up()
-                        }
-                    }
-                    ContinousController(1, val) => state.volume = val as i16, // volume / modulation wheel
-                    ContinousController(CC_SUSTAIN, val) => state.sustain = val > 0, // sustain pedal
-                    _ => {}
-                }
-            }
-
-            // update global version of the state here
+        // handle all pending Midi Commands
+        while let Some(cmd) = cortex_m::interrupt::free(|cs| MIDI_COMMAND_BUFFER.take(cs)) {
             cortex_m::interrupt::free(|cs| {
-                STATE.try_borrow_mut(cs, |s| {
-                    s.sustain = state.sustain;
-                    s.volume = state.volume;
+                ENGINE.try_borrow_mut(cs, |s| {
+                    s.process_command(cmd);
                     Some(0)
                 });
             });
@@ -278,38 +188,18 @@ fn main() -> ! {
     }
 }
 
-// struct MidiEngine {}
+static ENGINE: GlobalCell<SimpleMidiEngine> = GlobalCell::new(None);
 
-static STATE: GlobalCell<MidiState> = GlobalCell::new(None);
-
-static mut GENERATORS: Option<[EnvelopedGenerator; MIDI_KEYS]> = None;
-
-#[derive(Clone)]
-struct MidiState {
-    volume: i16,
-    sustain: bool,
-}
 fn FILL_BUFFER(buffer: &mut [i16]) {
     // get the current state of the midi engine
-    if let Some(state) =
-        cortex_m::interrupt::free(|cs| STATE.try_borrow_mut(cs, |s| Some(s.clone())))
-    {
-        if let Some(g) = unsafe { &mut GENERATORS } {
-            for i in 0..buffer.len() {
-                // and compute the next sample
 
-                let mut sample = 0i32;
-
-                for gen in g.iter_mut().filter(|g| g.is_active()) {
-                    sample += gen.next(state.sustain) as i32
-                }
-
-                // apply volume control: Volume is 0-127, so double that to get 0-254 and we can do fast scaling
-                let sample = sample.wrapping_mul(state.volume as i32) >> 8;
-
+    cortex_m::interrupt::free(|cs| {
+        ENGINE.try_borrow_mut(cs, |engine| {
+            (0..buffer.len()).for_each(|i| {
                 // generate the samples
-                buffer[i] = (sample >> 2) as i16;
-            }
-        }
-    }
+                buffer[i] = engine.next_sample();
+            });
+            Some(0)
+        });
+    });
 }
