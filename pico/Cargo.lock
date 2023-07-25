@@ -571,6 +571,7 @@ dependencies = [
  "pio",
  "pio-proc",
  "rp-pico",
+ "synth",
 ]
 
 [[package]]
@@ -841,6 +842,10 @@ dependencies = [
  "quote",
  "unicode-xid",
 ]
+
+[[package]]
+name = "synth"
+version = "0.1.0"
 
 [[package]]
 name = "term"

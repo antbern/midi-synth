@@ -19,7 +19,7 @@ use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
 
 use generator::EnvelopedGenerator;
-use midi::MidiCommand;
+
 use panic_probe as _;
 
 use queue::Queue;
@@ -62,7 +62,7 @@ type Uart1 = hal::uart::UartPeripheral<hal::uart::Enabled, pac::UART1, Uart1Pins
 static GLOBAL_UART0: Mutex<RefCell<Option<Uart0>>> = Mutex::new(RefCell::new(None));
 static GLOBAL_UART1: Mutex<RefCell<Option<Uart1>>> = Mutex::new(RefCell::new(None));
 
-static MIDI_COMMAND_BUFFER: Queue<32, MidiCommand> = Queue::new();
+static MIDI_COMMAND_BUFFER: Queue<32, synth::midi::MidiCommand> = Queue::new();
 
 static mut DMA_BUFFER: [i16; 16_000] = [0; 16_000];
 
@@ -193,7 +193,7 @@ fn main() -> ! {
             unsafe { core::mem::MaybeUninit::uninit().assume_init() };
 
         for (key, g) in &mut generators[..].iter_mut().enumerate() {
-            let freq = midi::KEY_CENTER_FREQ[key as usize] as f32;
+            let freq = synth::midi::KEY_CENTER_FREQ[key as usize] as f32;
 
             g.write(EnvelopedGenerator::new(
                 sampling_freq as f32,
@@ -241,7 +241,7 @@ fn main() -> ! {
         {
             // handle all pending Midi Commands
             while let Some(cmd) = cortex_m::interrupt::free(|cs| MIDI_COMMAND_BUFFER.take(cs)) {
-                use MidiCommand::*;
+                use synth::midi::MidiCommand::*;
                 // update state based on commants
                 match cmd {
                     NoteOn(key, vel) => {

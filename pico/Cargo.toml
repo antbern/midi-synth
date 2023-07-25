@@ -20,6 +20,8 @@ rp-pico = "0.6.0"
 pio = "0.2.0"
 pio-proc = "0.2.1"
 
+synth = { path = "../synth"}
+
 # [dev-dependencies]
 
 
