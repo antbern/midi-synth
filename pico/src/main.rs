@@ -174,17 +174,6 @@ fn main() -> ! {
                 });
             });
         }
-
-        // use the current state to generate samples?
-    }
-
-    delay.delay_ms(1000);
-
-    loop {
-        led_pin.set_high().unwrap();
-        delay.delay_ms(100);
-        led_pin.set_low().unwrap();
-        delay.delay_ms(100);
     }
 }
 
