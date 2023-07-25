@@ -1,15 +1,12 @@
 #![no_std]
 #![no_main]
 
-mod adsr;
 mod defmt_uart;
 mod dma;
-mod generator;
 mod i2s;
 mod midi;
 mod queue;
 mod util;
-mod waveforms;
 
 use core::cell::RefCell;
 
@@ -17,8 +14,6 @@ use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use defmt::*;
 use embedded_hal::digital::v2::OutputPin;
-
-use generator::EnvelopedGenerator;
 
 use panic_probe as _;
 
@@ -41,7 +36,7 @@ use bsp::hal::{
 use fugit::RateExtU32;
 use util::GlobalCell;
 
-use crate::{adsr::Parameters, generator::SineWave, i2s::I2SOutput};
+use synth::{adsr::Parameters, generator::EnvelopedGenerator, generator::SineWave};
 
 /// Alias the type for our UART pins to make things clearer.
 type Uart0Pins = (
@@ -148,7 +143,7 @@ fn main() -> ! {
     let sampling_freq = 16_000;
 
     let (pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
-    let mut i2s = I2SOutput::new(
+    let mut i2s = i2s::I2SOutput::new(
         (
             pins.gpio2.into_mode(),
             pins.gpio3.into_mode(),

@@ -9,7 +9,7 @@ pub struct Parameters {
 }
 
 impl Parameters {
-    pub(crate) fn new(
+    pub fn new(
         attack_time: f32,
         decay_time: f32,
         sustain_level: f32,
