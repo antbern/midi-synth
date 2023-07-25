@@ -35,6 +35,23 @@
                 "break main",
                 "continue"
             ],
-        }
+        },
+        {
+            "preLaunchTask": "Cargo build",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "probe_rs Executable Test",
+            "chip": "RP2040", //!MODIFY
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "haltAfterReset": true,
+            },
+            "coreConfigs": [
+              {
+                "programBinary": "${workspaceRoot}/target/thumbv6m-none-eabi/debug/pico-midi-synth", //!MODIFY,
+                "svdFile": "/home/antbern/pico/svd/rp2040.svd"
+              }
+            ]
+          }
     ]
 }
