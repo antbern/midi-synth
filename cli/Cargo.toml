@@ -10,4 +10,15 @@ edition = "2021"
 
 synth = { path = '../synth' }
 
+anyhow = {version = "1.0"}
+crossbeam-channel = "0.5.8"
+cpal = "0.15.2"
 
+
+[profile.dev.package."*"]
+# Full optimization for dependencies
+opt-level = 3
+
+[profile.dev]
+# Turn on a small amount of optimisation in development mode.
+opt-level = 1
