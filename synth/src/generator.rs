@@ -1,18 +1,26 @@
 use crate::{
     adsr::{Parameters, PianoEnvelope},
-    waveforms::SINE_TABLE,
+    biquad::{Biquad, FilterType},
+    waveforms::{SINE_TABLE, self},
 };
 
 pub struct EnvelopedGenerator {
-    oscillator: SineWave,
+    oscillator: LutGenerator,
     envelope: PianoEnvelope,
+    filter: Biquad,
 }
 
 impl EnvelopedGenerator {
     pub fn new(sample_rate: f32, frequency: f32, params: Parameters) -> EnvelopedGenerator {
         EnvelopedGenerator {
-            oscillator: SineWave::new(sample_rate, frequency),
+            oscillator: LutGenerator::new(&waveforms::SAW_TABLE, sample_rate, frequency),
             envelope: PianoEnvelope::new(sample_rate, params, 2.0),
+            filter: Biquad::new(
+                FilterType::Lowpass,
+                2.0 * frequency / sample_rate,
+                0.7071,
+                -3.0,
+            ),
         }
     }
 
@@ -34,30 +42,35 @@ impl EnvelopedGenerator {
 
         let sample = self.oscillator.next();
 
+        // run it through the filter (works but is very EXPENSIVE!)
+        let sample = self.filter.process(sample as f32 / i16::MAX as f32) * i16::MAX as f32;
+
         // fast multiplication, treating the 256 as "1"
         ((sample as i32).wrapping_mul(env as i32) >> 8) as i16 // div 256
     }
 }
 
-///
+/// A wave generator that uses a 256-step lookup table.
 ///
 /// Implementation based on James Munns [blog post]
 ///
 /// [blog post]: https://jamesmunns.com/blog/fixed-point-math/
-pub struct SineWave {
+pub struct LutGenerator {
+    lut: &'static [i16; 256],
     incr: i32,
     cur_offset: i32,
 }
 
-impl SineWave {
-    pub fn new(sample_rate: f32, frequency: f32) -> Self {
+impl LutGenerator {
+    pub fn new(lut: &'static [i16; 256], sample_rate: f32, frequency: f32) -> Self {
         let samp_per_cycle = sample_rate / frequency;
 
         let fincr = 256.0 / samp_per_cycle;
 
         let incr: i32 = (((1 << 24) as f32) * fincr) as i32;
 
-        SineWave {
+        LutGenerator {
+            lut,
             incr,
             cur_offset: 0,
         }
@@ -74,8 +87,8 @@ impl SineWave {
 
         let idx_nxt = idx_now.wrapping_add(1);
 
-        let base_val = SINE_TABLE[idx_now as usize] as i32;
-        let next_val = SINE_TABLE[idx_nxt as usize] as i32;
+        let base_val = self.lut[idx_now as usize] as i32;
+        let next_val = self.lut[idx_nxt as usize] as i32;
 
         let off = ((val >> 16) & 0xFF) as i32;
 

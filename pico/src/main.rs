@@ -33,7 +33,7 @@ use bsp::hal::{
     uart::{DataBits, StopBits, UartConfig, UartPeripheral},
     watchdog::Watchdog,
 };
-use fugit::RateExtU32;
+use fugit::{Instant, RateExtU32};
 use util::GlobalCell;
 
 use synth::engine::{MidiEngine, SimpleMidiEngine};
@@ -59,6 +59,8 @@ static GLOBAL_UART1: Mutex<RefCell<Option<Uart1>>> = Mutex::new(RefCell::new(Non
 
 static MIDI_COMMAND_BUFFER: Queue<32, synth::midi::MidiCommand> = Queue::new();
 
+static mut TIMER: Option<hal::Timer> = None;
+
 #[entry]
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
@@ -79,6 +81,10 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
+
+    unsafe {
+        TIMER = Some(hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS));
+    }
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
@@ -137,7 +143,7 @@ fn main() -> ! {
     info!("Program start");
     let mut led_pin = pins.led.into_push_pull_output();
 
-    let sampling_freq = 16_000 * 2;
+    let sampling_freq = 24_000;
 
     let (pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
     let i2s = i2s::I2SOutput::new(
@@ -180,7 +186,10 @@ fn main() -> ! {
 static ENGINE: GlobalCell<SimpleMidiEngine> = GlobalCell::new(None);
 
 fn FILL_BUFFER(buffer: &mut [i16]) {
-    // get the current state of the midi engine
+    // get the current state of the midi engine]
+
+    let t = unsafe { &TIMER.as_ref().unwrap_unchecked() };
+    let start = t.get_counter();
 
     cortex_m::interrupt::free(|cs| {
         ENGINE.try_borrow_mut(cs, |engine| {
@@ -191,4 +200,12 @@ fn FILL_BUFFER(buffer: &mut [i16]) {
             Some(0)
         });
     });
+
+    let diff = t.get_counter() - start;
+
+    debug!(
+        "FILL_BUFFER took {:?} microseconds to fill {} samples",
+        diff.ticks(),
+        buffer.len()
+    );
 }

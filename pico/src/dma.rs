@@ -130,5 +130,11 @@ fn DMA_IRQ_0() {
         .write(|w| unsafe { w.ints0().bits(1u16 << dma) });
 
     // fill the next buffer with the data HERE
+    // PROBLEM: if this call takes longer than then number of samples we are generating, then 
+    // the DMA ping-pong means that we do not get to reset the read address in time,
+    // causing the DMA to read random (garbage) bytes and writing them out to the 
+    // I2S interface causing loud white noise to appear in the speaker. In the future,
+    // we should look into using a third DMA channel that can automatically restart 
+    // the channels at the appropriate addresses.
     crate::FILL_BUFFER(buffer.as_mut_slice());
 }

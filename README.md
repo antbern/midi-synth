@@ -21,6 +21,6 @@ To facilitate this, the project is divided into three crates:
 - [x] MIDI input.
 - [x] Note On/Off amplitude envelope.
 - [ ] Other types of waves: square, saw, triangle.
-- [ ] Low- and high-pass filters.
+- [x] Low- and high-pass filters.
 - [ ] Using fixed point integer math (currently uses `i16`, but the pico is a 32-bit device).
 - [ ] Using MIDI control messages to change filter, envelope parameters and wave form.
