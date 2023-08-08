@@ -336,6 +336,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
+
+[[package]]
 name = "lock_api"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,6 +663,9 @@ dependencies = [
 [[package]]
 name = "synth"
 version = "0.1.0"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "thiserror"
