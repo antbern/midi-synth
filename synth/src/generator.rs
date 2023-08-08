@@ -1,7 +1,9 @@
+use fixed::S15x16;
+
 use crate::{
     adsr::{Parameters, PianoEnvelope},
     biquad::{Biquad, FilterType},
-    waveforms::{self, SINE_TABLE},
+    waveforms,
 };
 
 pub struct EnvelopedGenerator {
@@ -38,15 +40,13 @@ impl EnvelopedGenerator {
 
     pub fn next(&mut self, sustain: bool) -> i16 {
         // convert envelope in value 0-1 to i16 in range 0-256
-        let env = (self.envelope.next_sample(sustain) * 256.0) as i16;
+        let env = S15x16::from_float(self.envelope.next_sample(sustain));
 
-        let sample = self.oscillator.next();
+        let sample = S15x16::from_int(self.oscillator.next()) / i16::MAX;
 
-        // run it through the filter (works but is very EXPENSIVE!)
-        let sample = self.filter.process(sample as f32 / i16::MAX as f32) * i16::MAX as f32;
+        let sample = self.filter.process(sample);
 
-        // fast multiplication, treating the 256 as "1"
-        ((sample as i32).wrapping_mul(env as i32) >> 8) as i16 // div 256
+        (sample * env * i16::MAX).to_int()
     }
 }
 
