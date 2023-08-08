@@ -1,5 +1,7 @@
 use core::f32::consts::PI;
 
+use fixed::S15x16;
+
 /// A simple Biquad filter.
 ///
 /// Originally created by Created by Nigel Redmon on 11/24/12 using a permissive license.
@@ -21,13 +23,13 @@ pub enum FilterType {
 }
 pub struct Biquad {
     r#type: FilterType,
-    a0: f32,
-    a1: f32,
-    a2: f32,
-    b1: f32,
-    b2: f32,
-    z1: f32,
-    z2: f32,
+    a0: S15x16,
+    a1: S15x16,
+    a2: S15x16,
+    b1: S15x16,
+    b2: S15x16,
+    z1: S15x16,
+    z2: S15x16,
 }
 
 impl Biquad {
@@ -36,6 +38,8 @@ impl Biquad {
         //let k: f32 = (PI * fc).tan();
         let k: f32 = libm::tan((PI * fc) as f64) as f32;
 
+        let k: S15x16 = k.into();
+
         match r#type {
             FilterType::Lowpass => {
                 let norm = 1.0 / (1.0 + k / q + k * k);
@@ -43,13 +47,13 @@ impl Biquad {
 
                 Self {
                     r#type,
-                    a0,
-                    a1: 2.0 * a0,
-                    a2: a0,
-                    b1: 2.0 * (k * k - 1.0) * norm,
-                    b2: (1.0 - k / q + k * k) * norm,
-                    z1: 0.0,
-                    z2: 0.0,
+                    a0: a0.into(),
+                    a1: (2.0 * a0).into(),
+                    a2: a0.into(),
+                    b1: (2.0 * (k * k - 1.0) * norm).into(),
+                    b2: ((1.0 - k / q + k * k) * norm).into(),
+                    z1: 0.0.into(),
+                    z2: 0.0.into(),
                 }
             }
             FilterType::Highpass => {
@@ -62,8 +66,8 @@ impl Biquad {
                     a2: a0,
                     b1: 2.0 * (k * k - 1.0) * norm,
                     b2: (1.0 - k / q + k * k) * norm,
-                    z1: 0.0,
-                    z2: 0.0,
+                    z1: 0.0.into(),
+                    z2: 0.0.into(),
                 }
             } // FilterType::Bandpass => todo!(),
               // FilterType::Notch => todo!(),
@@ -167,10 +171,10 @@ impl Biquad {
     }
 
     /// Apply the filter to the sample
-    pub fn process(&mut self, sample: f32) -> f32 {
+    pub fn process(&mut self, sample: S15x16) -> S15x16 {
         let out = sample * self.a0 + self.z1;
         self.z1 = sample * self.a1 + self.z2 - self.b1 * out;
         self.z2 = sample * self.a2 - self.b2 * out;
-        out as f32
+        out
     }
 }
