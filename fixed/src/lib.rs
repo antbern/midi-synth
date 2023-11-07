@@ -73,6 +73,11 @@ impl From<i16> for S15x16 {
     }
 }
 
+impl From<i8> for S15x16 {
+    fn from(value: i8) -> Self {
+        Self::from_int(value as i16)
+    }
+}
 impl Add for S15x16 {
     type Output = Self;
 
@@ -225,6 +230,7 @@ macro_rules! aritmetic_from {
 
 aritmetic_from!(f32);
 aritmetic_from!(i16);
+aritmetic_from!(i8);
 
 #[cfg(test)]
 mod tests {
@@ -239,8 +245,6 @@ mod tests {
 
     #[test]
     fn add_sub() {
-        2.0 + S15x16::from_int(10);
-
         assert_eq!(
             S15x16::from_int(10) + S15x16::from_int(45),
             S15x16::from_int(55)
