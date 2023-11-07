@@ -158,17 +158,16 @@ fn main() -> ! {
         sm0,
     );
 
-    dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
-
-    while pac.DMA.ch(0).ch_ctrl_trig().read().busy().bit_is_set() {
-        led_pin.set_high().unwrap();
-        delay.delay_ms(50);
-        led_pin.set_low().unwrap();
-        delay.delay_ms(100);
-    }
-
     // initialize the engine
     cortex_m::interrupt::free(|cs| ENGINE.put_cs(cs, SimpleMidiEngine::new(sampling_freq as f32)));
+    dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
+
+    //  while pac.DMA.ch(0).ch_ctrl_trig().read().busy().bit_is_set() {
+    //     led_pin.set_high().unwrap();
+    //     delay.delay_ms(50);
+    //     led_pin.set_low().unwrap();
+    //     delay.delay_ms(100);
+    // }
 
     loop {
         // handle all pending Midi Commands
@@ -205,8 +204,9 @@ fn FILL_BUFFER(buffer: &mut [i16]) {
     let diff = t.get_counter() - start;
 
     debug!(
-        "FILL_BUFFER took {:?} microseconds to fill {} samples",
+        "FILL_BUFFER took {:?} microseconds to fill {} samples ({}/sample)",
         diff.ticks(),
-        buffer.len()
+        buffer.len(),
+        diff.ticks() / buffer.len() as u64,
     );
 }

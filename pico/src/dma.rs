@@ -119,7 +119,7 @@ fn DMA_IRQ_0() {
         (DMA_B, unsafe { core::ptr::addr_of_mut!(DMA_BUFFER_B) })
     };
 
-    debug!("IRQ0 TRIGGERED by DMA {}", dma);
+    //debug!("IRQ0 TRIGGERED by DMA {}", dma);
 
     // reconfigure the read addres of the completed DMA channel
     p.DMA
