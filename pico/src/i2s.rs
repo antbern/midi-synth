@@ -3,7 +3,7 @@ use rp_pico::{
         clocks::ClocksManager,
         gpio::{
             bank0::{Gpio2, Gpio3, Gpio4},
-            FunctionPio0, Pin,
+            FunctionPio0, Pin, PullDown,
         },
         pio::{
             Buffers, PIOBuilder, PinDir, Running, ShiftDirection, StateMachine, Tx,
@@ -31,13 +31,15 @@ pub struct I2SOutput {
     tx: Tx<(PIO0, SM0)>,
 }
 
+pub type I2SOutputPins = (
+    Pin<Gpio2, FunctionPio0, PullDown>,
+    Pin<Gpio3, FunctionPio0, PullDown>,
+    Pin<Gpio4, FunctionPio0, PullDown>,
+);
+
 impl I2SOutput {
     pub fn new(
-        _pins: (
-            Pin<Gpio2, FunctionPio0>,
-            Pin<Gpio3, FunctionPio0>,
-            Pin<Gpio4, FunctionPio0>,
-        ),
+        _pins: I2SOutputPins,
         sampling_freq: u32,
         clocks: &ClocksManager,
         mut pio: PIO<PIO0>,
@@ -67,7 +69,7 @@ impl I2SOutput {
         core::assert!(divider < 0x1000000);
 
         // finally setup the PIO program with program-specific details
-        let (mut sm, _rx, tx) = PIOBuilder::from_program(installed)
+        let (mut sm, _rx, tx) = PIOBuilder::from_installed_program(installed)
             .side_set_pin_base(bclk_pin)
             .out_pins(data_pin, 1)
             .out_shift_direction(ShiftDirection::Left)
