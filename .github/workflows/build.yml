@@ -23,6 +23,9 @@ jobs:
       with:
         toolchain: stable
 
+    - name: Install dependencies
+      run: sudo apt install libasound2-dev
+
     - name: Build
       run: cargo build
 
