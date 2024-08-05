@@ -33,7 +33,7 @@ use bsp::hal::{
     uart::{DataBits, StopBits, UartConfig, UartPeripheral},
     watchdog::Watchdog,
 };
-use fugit::{Instant, RateExtU32};
+use fugit::RateExtU32;
 use util::GlobalCell;
 
 use synth::engine::{MidiEngine, SimpleMidiEngine};
@@ -185,6 +185,7 @@ fn main() -> ! {
 
 static ENGINE: GlobalCell<SimpleMidiEngine> = GlobalCell::new(None);
 
+#[allow(non_snake_case)]
 fn FILL_BUFFER(buffer: &mut [i16]) {
     // get the current state of the midi engine]
 

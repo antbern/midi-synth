@@ -14,9 +14,11 @@ impl<T> GlobalCell<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn put(&self, value: T) {
         free(|cs| self.put_cs(cs, value));
     }
+
     pub fn put_cs(&self, cs: &CriticalSection, value: T) {
         // *self.cell.borrow(cs).borrow_mut() = Some(value);
         self.cell.borrow(cs).replace(Some(value)); //

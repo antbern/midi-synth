@@ -26,8 +26,8 @@ use rp_pico::{
 /// [`pico_audio_i2s`]: (https://github.com/raspberrypi/pico-extras/blob/master/src/rp2_common/pico_audio_i2s)
 /// [`pico_extras`]: (https://github.com/raspberrypi/pico-extras)
 pub struct I2SOutput {
-    pio: PIO<PIO0>,
-    sm: StateMachine<(PIO0, SM0), Running>,
+    _pio: PIO<PIO0>,
+    _sm: StateMachine<(PIO0, SM0), Running>,
     tx: Tx<(PIO0, SM0)>,
 }
 
@@ -67,7 +67,7 @@ impl I2SOutput {
         core::assert!(divider < 0x1000000);
 
         // finally setup the PIO program with program-specific details
-        let (mut sm, _rx, mut tx) = PIOBuilder::from_program(installed)
+        let (mut sm, _rx, tx) = PIOBuilder::from_program(installed)
             .side_set_pin_base(bclk_pin)
             .out_pins(data_pin, 1)
             .out_shift_direction(ShiftDirection::Left)
@@ -96,12 +96,16 @@ impl I2SOutput {
 
         let sm = sm.start();
 
-        I2SOutput { pio, sm, tx }
+        I2SOutput {
+            _pio: pio,
+            _sm: sm,
+            tx,
+        }
     }
 
-    pub fn write(&mut self, sample: i16) -> bool {
-        self.tx.write_u16_replicated(sample as u16)
-    }
+    // pub fn write(&mut self, sample: i16) -> bool {
+    //     self.tx.write_u16_replicated(sample as u16)
+    // }
 
     pub fn tx_addr(&self) -> *const u32 {
         self.tx.fifo_address()
