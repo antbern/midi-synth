@@ -12,7 +12,7 @@ synth = { path = '../synth' }
 
 anyhow = {version = "1.0"}
 crossbeam-channel = "0.5.8"
-cpal = "0.15.2"
+cpal = "0.15.3"
 
 
 [profile.dev.package."*"]
