@@ -24,7 +24,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
     while !resets.reset_done().read().dma().bit_is_set() {}
 
     setup_channel(
-        &dma.ch(DMA_A as usize),
+        dma.ch(DMA_A as usize),
         (unsafe { core::ptr::addr_of!(DMA_BUFFER_A) } as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,
@@ -33,7 +33,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
     );
 
     setup_channel(
-        &dma.ch(DMA_B as usize),
+        dma.ch(DMA_B as usize),
         (unsafe { core::ptr::addr_of!(DMA_BUFFER_B) } as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,

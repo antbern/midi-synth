@@ -31,13 +31,15 @@ pub struct I2SOutput {
     tx: Tx<(PIO0, SM0)>,
 }
 
+pub type I2SOutputPins = (
+    Pin<Gpio2, FunctionPio0, PullDown>,
+    Pin<Gpio3, FunctionPio0, PullDown>,
+    Pin<Gpio4, FunctionPio0, PullDown>,
+);
+
 impl I2SOutput {
     pub fn new(
-        _pins: (
-            Pin<Gpio2, FunctionPio0, PullDown>,
-            Pin<Gpio3, FunctionPio0, PullDown>,
-            Pin<Gpio4, FunctionPio0, PullDown>,
-        ),
+        _pins: I2SOutputPins,
         sampling_freq: u32,
         clocks: &ClocksManager,
         mut pio: PIO<PIO0>,
