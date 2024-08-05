@@ -13,7 +13,7 @@ use core::cell::RefCell;
 use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use defmt::*;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 
 use panic_probe as _;
 
@@ -25,7 +25,7 @@ use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     gpio::{
         bank0::{Gpio0, Gpio1, Gpio8, Gpio9},
-        FunctionUart,
+        FunctionUart, PullDown,
     },
     pac,
     pio::PIOExt,
@@ -40,13 +40,13 @@ use synth::engine::{MidiEngine, SimpleMidiEngine};
 
 /// Alias the type for our UART pins to make things clearer.
 type Uart0Pins = (
-    hal::gpio::Pin<Gpio0, hal::gpio::Function<hal::gpio::Uart>>,
-    hal::gpio::Pin<Gpio1, hal::gpio::Function<hal::gpio::Uart>>,
+    hal::gpio::Pin<Gpio0, FunctionUart, PullDown>,
+    hal::gpio::Pin<Gpio1, FunctionUart, PullDown>,
 );
 
 type Uart1Pins = (
-    hal::gpio::Pin<Gpio8, hal::gpio::Function<hal::gpio::Uart>>,
-    hal::gpio::Pin<Gpio9, hal::gpio::Function<hal::gpio::Uart>>,
+    hal::gpio::Pin<Gpio8, FunctionUart, PullDown>,
+    hal::gpio::Pin<Gpio9, FunctionUart, PullDown>,
 );
 
 /// Alias the type for our UART to make things clearer.
@@ -83,7 +83,7 @@ fn main() -> ! {
     .unwrap();
 
     unsafe {
-        TIMER = Some(hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS));
+        TIMER = Some(hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks));
     }
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
@@ -95,9 +95,9 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let uart_pins = (
-        pins.gpio0.into_mode::<FunctionUart>(),
-        pins.gpio1.into_mode::<FunctionUart>(),
+    let uart_pins: Uart0Pins = (
+        pins.gpio0.into_function::<FunctionUart>(),
+        pins.gpio1.into_function::<FunctionUart>(),
     );
 
     let uart = UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
@@ -115,9 +115,9 @@ fn main() -> ! {
     });
 
     // Open UART for incoming MIDI messages (uses pin 9 for RX only)
-    let uart_pins = (
-        pins.gpio8.into_mode::<FunctionUart>(),
-        pins.gpio9.into_mode::<FunctionUart>(),
+    let uart_pins: Uart1Pins = (
+        pins.gpio8.into_function::<FunctionUart>(),
+        pins.gpio9.into_function::<FunctionUart>(),
     );
 
     let mut uart_midi = UartPeripheral::new(pac.UART1, uart_pins, &mut pac.RESETS)
@@ -148,9 +148,9 @@ fn main() -> ! {
     let (pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
     let i2s = i2s::I2SOutput::new(
         (
-            pins.gpio2.into_mode(),
-            pins.gpio3.into_mode(),
-            pins.gpio4.into_mode(),
+            pins.gpio2.into_function(),
+            pins.gpio3.into_function(),
+            pins.gpio4.into_function(),
         ),
         sampling_freq,
         &clocks,
@@ -160,7 +160,7 @@ fn main() -> ! {
 
     dma::setup_double_buffered(&mut pac.RESETS, &pac.DMA, &i2s);
 
-    while pac.DMA.ch[0].ch_ctrl_trig.read().busy().bit_is_set() {
+    while pac.DMA.ch(0).ch_ctrl_trig().read().busy().bit_is_set() {
         led_pin.set_high().unwrap();
         delay.delay_ms(50);
         led_pin.set_low().unwrap();

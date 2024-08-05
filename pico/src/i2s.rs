@@ -3,7 +3,7 @@ use rp_pico::{
         clocks::ClocksManager,
         gpio::{
             bank0::{Gpio2, Gpio3, Gpio4},
-            FunctionPio0, Pin,
+            FunctionPio0, Pin, PullDown,
         },
         pio::{
             Buffers, PIOBuilder, PinDir, Running, ShiftDirection, StateMachine, Tx,
@@ -34,9 +34,9 @@ pub struct I2SOutput {
 impl I2SOutput {
     pub fn new(
         _pins: (
-            Pin<Gpio2, FunctionPio0>,
-            Pin<Gpio3, FunctionPio0>,
-            Pin<Gpio4, FunctionPio0>,
+            Pin<Gpio2, FunctionPio0, PullDown>,
+            Pin<Gpio3, FunctionPio0, PullDown>,
+            Pin<Gpio4, FunctionPio0, PullDown>,
         ),
         sampling_freq: u32,
         clocks: &ClocksManager,
