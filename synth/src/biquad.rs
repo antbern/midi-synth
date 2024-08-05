@@ -30,7 +30,6 @@ pub struct Biquad {
     z2: f32,
 }
 
-
 impl Biquad {
     pub fn new(r#type: FilterType, fc: f32, q: f32, peak_gain_dB: f32) -> Self {
         //let V: f32 = (peak_gain_dB.abs() / 20.0).powf(10.0);
@@ -66,12 +65,11 @@ impl Biquad {
                     z1: 0.0,
                     z2: 0.0,
                 }
-            }
-            // FilterType::Bandpass => todo!(),
-            // FilterType::Notch => todo!(),
-            // FilterType::Peak => todo!(),
-            // FilterType::Lowshelf => todo!(),
-            // FilterType::Highshelf => todo!(),
+            } // FilterType::Bandpass => todo!(),
+              // FilterType::Notch => todo!(),
+              // FilterType::Peak => todo!(),
+              // FilterType::Lowshelf => todo!(),
+              // FilterType::Highshelf => todo!(),
         }
 
         // switch (this->type) {
@@ -167,7 +165,7 @@ impl Biquad {
         //         break;
         // }
     }
-    
+
     /// Apply the filter to the sample
     pub fn process(&mut self, sample: f32) -> f32 {
         let out = sample * self.a0 + self.z1;

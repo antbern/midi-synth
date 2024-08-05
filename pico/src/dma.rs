@@ -24,7 +24,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
 
     setup_channel(
         &dma.ch[DMA_A as usize],
-        (unsafe { &DMA_BUFFER_A } as *const i16) as u32,
+        (unsafe { core::ptr::addr_of!(DMA_BUFFER_A) } as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,
         DMA_B,
@@ -33,7 +33,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
 
     setup_channel(
         &dma.ch[DMA_B as usize],
-        (unsafe { &DMA_BUFFER_B } as *const i16) as u32,
+        (unsafe { core::ptr::addr_of!(DMA_BUFFER_B) } as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,
         DMA_A,
@@ -112,9 +112,9 @@ fn DMA_IRQ_0() {
 
     // extract which DMA that completed so that it can be reconfigured
     let (dma, buffer) = if ints0 & (1u16 << DMA_A) != 0 {
-        (DMA_A, unsafe { &mut DMA_BUFFER_A })
+        (DMA_A, unsafe { core::ptr::addr_of_mut!(DMA_BUFFER_A) })
     } else {
-        (DMA_B, unsafe { &mut DMA_BUFFER_B })
+        (DMA_B, unsafe { core::ptr::addr_of_mut!(DMA_BUFFER_B) })
     };
 
     debug!("IRQ0 TRIGGERED by DMA {}", dma);
@@ -130,11 +130,11 @@ fn DMA_IRQ_0() {
         .write(|w| unsafe { w.ints0().bits(1u16 << dma) });
 
     // fill the next buffer with the data HERE
-    // PROBLEM: if this call takes longer than then number of samples we are generating, then 
+    // PROBLEM: if this call takes longer than then number of samples we are generating, then
     // the DMA ping-pong means that we do not get to reset the read address in time,
-    // causing the DMA to read random (garbage) bytes and writing them out to the 
+    // causing the DMA to read random (garbage) bytes and writing them out to the
     // I2S interface causing loud white noise to appear in the speaker. In the future,
-    // we should look into using a third DMA channel that can automatically restart 
+    // we should look into using a third DMA channel that can automatically restart
     // the channels at the appropriate addresses.
-    crate::FILL_BUFFER(buffer.as_mut_slice());
+    crate::FILL_BUFFER(unsafe { &mut *buffer });
 }
