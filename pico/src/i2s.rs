@@ -67,7 +67,7 @@ impl I2SOutput {
         core::assert!(divider < 0x1000000);
 
         // finally setup the PIO program with program-specific details
-        let (mut sm, _rx, tx) = PIOBuilder::from_program(installed)
+        let (mut sm, _rx, tx) = PIOBuilder::from_installed_program(installed)
             .side_set_pin_base(bclk_pin)
             .out_pins(data_pin, 1)
             .out_shift_direction(ShiftDirection::Left)
