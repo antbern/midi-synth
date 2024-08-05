@@ -1,7 +1,7 @@
 use crate::{
     adsr::{Parameters, PianoEnvelope},
     biquad::{Biquad, FilterType},
-    waveforms::{SINE_TABLE, self},
+    waveforms::{self, SINE_TABLE},
 };
 
 pub struct EnvelopedGenerator {
