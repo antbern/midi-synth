@@ -25,7 +25,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
 
     setup_channel(
         dma.ch(DMA_A as usize),
-        (unsafe { core::ptr::addr_of!(DMA_BUFFER_A) } as *const i16) as u32,
+        (core::ptr::addr_of_mut!(DMA_BUFFER_A) as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,
         DMA_B,
@@ -34,7 +34,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
 
     setup_channel(
         dma.ch(DMA_B as usize),
-        (unsafe { core::ptr::addr_of!(DMA_BUFFER_B) } as *const i16) as u32,
+        (core::ptr::addr_of_mut!(DMA_BUFFER_B) as *const i16) as u32,
         i2s.tx_addr() as u32,
         BUFFER_LENGTH as u32,
         DMA_A,
@@ -114,9 +114,9 @@ fn DMA_IRQ_0() {
 
     // extract which DMA that completed so that it can be reconfigured
     let (dma, buffer) = if ints0 & (1u16 << DMA_A) != 0 {
-        (DMA_A, unsafe { core::ptr::addr_of_mut!(DMA_BUFFER_A) })
+        (DMA_A, core::ptr::addr_of_mut!(DMA_BUFFER_A))
     } else {
-        (DMA_B, unsafe { core::ptr::addr_of_mut!(DMA_BUFFER_B) })
+        (DMA_B, core::ptr::addr_of_mut!(DMA_BUFFER_B))
     };
 
     debug!("IRQ0 TRIGGERED by DMA {}", dma);
