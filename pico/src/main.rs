@@ -189,7 +189,7 @@ static ENGINE: GlobalCell<SimpleMidiEngine> = GlobalCell::new(None);
 fn FILL_BUFFER(buffer: &mut [i16]) {
     // get the current state of the midi engine]
 
-    let t = unsafe { &TIMER.as_ref().unwrap_unchecked() };
+    let t = unsafe { TIMER.unwrap_unchecked() };
     let start = t.get_counter();
 
     cortex_m::interrupt::free(|cs| {

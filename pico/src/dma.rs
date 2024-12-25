@@ -42,8 +42,8 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
     );
 
     // make sure buffers are initialized
-    crate::FILL_BUFFER(unsafe { DMA_BUFFER_A.as_mut_slice() });
-    crate::FILL_BUFFER(unsafe { DMA_BUFFER_B.as_mut_slice() });
+    crate::FILL_BUFFER(&mut unsafe { DMA_BUFFER_A });
+    crate::FILL_BUFFER(&mut unsafe { DMA_BUFFER_B });
 
     // enable interrupts
     dma.inte0()

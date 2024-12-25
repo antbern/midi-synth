@@ -37,7 +37,8 @@ unsafe impl defmt::Logger for UartLogger {
         INTERRUPTS_ACTIVE.store(primask.is_active(), Ordering::Relaxed);
 
         // safety: accessing the `static mut` is OK because we have disabled interrupts.
-        unsafe { ENCODER.start_frame(do_write) }
+        let encoder = &raw mut ENCODER;
+        unsafe { (*encoder).start_frame(do_write) }
     }
 
     unsafe fn flush() {
@@ -48,7 +49,8 @@ unsafe impl defmt::Logger for UartLogger {
 
     unsafe fn release() {
         // safety: accessing the `static mut` is OK because we have disabled interrupts.
-        ENCODER.end_frame(do_write);
+        let encoder = &raw mut ENCODER;
+        unsafe { (*encoder).end_frame(do_write) }
 
         TAKEN.store(false, Ordering::Relaxed);
 
@@ -60,7 +62,8 @@ unsafe impl defmt::Logger for UartLogger {
 
     unsafe fn write(bytes: &[u8]) {
         // safety: accessing the `static mut` is OK because we have disabled interrupts.
-        ENCODER.write(bytes, do_write);
+        let encoder = &raw mut ENCODER;
+        unsafe { (*encoder).write(bytes, do_write) }
     }
 }
 

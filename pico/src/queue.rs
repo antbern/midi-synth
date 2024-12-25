@@ -11,7 +11,6 @@ struct QueueInner<const N: usize, T> {
 }
 /// A queue that stores `T`s and provides inner mutability to the
 /// queue, as long as a `CriticalSection` is passed as an argument to most functions.
-
 pub struct Queue<const N: usize, T> {
     inner: Mutex<RefCell<QueueInner<N, T>>>,
 }
