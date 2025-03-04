@@ -47,7 +47,7 @@ pub fn setup_double_buffered(resets: &mut pac::RESETS, dma: &pac::DMA, i2s: &i2s
 
     // enable interrupts
     dma.inte0()
-        .modify(|_, w| unsafe { w.inte0().bits(1u16 << DMA_A | 1u16 << DMA_B) });
+        .modify(|_, w| unsafe { w.inte0().bits((1u16 << DMA_A) | (1u16 << DMA_B)) });
 
     unsafe {
         pac::NVIC::unmask(pac::Interrupt::DMA_IRQ_0);
@@ -107,7 +107,7 @@ fn DMA_IRQ_0() {
 
     let ints0 = p.DMA.ints0().read().ints0().bits();
     // if it was not triggered by any of our DMA channels, just return
-    if ints0 & (1u16 << DMA_A | 1u16 << DMA_B) == 0 {
+    if ints0 & ((1u16 << DMA_A) | (1u16 << DMA_B)) == 0 {
         debug!("DMA_IRQ_0 interrupt happened, but not by DMA_A or DMA_B!");
         return;
     }
