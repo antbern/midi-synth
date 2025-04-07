@@ -13,7 +13,7 @@ embedded-time = "0.12.1"
 fugit = "0.3.6"
 
 
-defmt = "0.3.10"
+defmt = "1.0.1"
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 
 rp-pico = "0.9.0"
