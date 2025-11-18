@@ -10,7 +10,7 @@ cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 embedded-hal = { version = "1" }
 embedded-time = "0.12.1"
-fugit = "0.3.6"
+fugit = "0.3.9"
 
 
 defmt = "1.0.1"
