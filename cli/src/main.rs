@@ -114,7 +114,7 @@ fn setup_sound(rx: crossbeam_channel::Receiver<MidiCommand>) -> Result<Stream> {
     println!("Default output config: {:?}", config);
 
     // construct the sound engine instance
-    let engine = Engine::new(rx, config.sample_rate().0 as f32);
+    let engine = Engine::new(rx, config.sample_rate() as f32);
 
     match config.sample_format() {
         cpal::SampleFormat::F32 => construct_stream::<f32>(&device, &config.into(), engine),
