@@ -354,6 +354,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fugit"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e88e2d6927cbdbbbdc85fc550cee539e63ae0f76445f13094833f63bb65b62f5"
+dependencies = [
+ "gcd",
+]
+
+[[package]]
 name = "gcd"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -682,7 +691,7 @@ dependencies = [
  "defmt",
  "embedded-hal 1.0.0",
  "embedded-time",
- "fugit",
+ "fugit 0.5.0",
  "panic-probe",
  "pio",
  "pio-proc",
@@ -852,7 +861,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9342d3ac7011ac688300979e9b52a81f0add1d05feb02868cf94bfee0705b28"
 dependencies = [
  "cortex-m-rt",
- "fugit",
+ "fugit 0.3.9",
  "rp2040-boot2",
  "rp2040-hal",
  "usb-device",
@@ -883,7 +892,7 @@ dependencies = [
  "embedded-hal-nb",
  "embedded-io",
  "frunk",
- "fugit",
+ "fugit 0.3.9",
  "itertools",
  "nb 1.1.0",
  "paste",
